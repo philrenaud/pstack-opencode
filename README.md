@@ -16,28 +16,20 @@ commands/   /poteto-mode slash command
 
 ## Install
 
-Clone it, then point OpenCode at the clone. The clone is the live source of truth; nothing is copied.
+Clone it anywhere, then run the install script from inside the clone:
 
 ```sh
-git clone https://github.com/philrenaud/pstack-opencode.git ~/www/pstack-opencode
+git clone https://github.com/philrenaud/pstack-opencode.git
+cd pstack-opencode && ./install.sh
 ```
 
-Paths below assume `~/www/pstack-opencode`; adjust if you cloned elsewhere.
+The clone is the live source of truth; nothing is copied and `git pull` is the update mechanism. The script is idempotent (re-run it if you move the clone) and does three things:
 
-1. Skills, via `skills.paths` in `~/.config/opencode/opencode.jsonc`:
+1. Registers `skills/` via `skills.paths` in `~/.config/opencode/opencode.json`. If a config file already exists without the entry, it prints the line to add rather than editing your config.
+2. Symlinks `agents/*.md` and `commands/*.md` into `~/.config/opencode/agents/` and `commands/` (OpenCode has no `paths` config for these, so symlinks keep the repo authoritative).
+3. Prints the verification commands.
 
-   ```jsonc
-   { "skills": { "paths": ["~/www/pstack-opencode/skills"] } }
-   ```
-
-2. Agents and the command, via symlinks:
-
-   ```sh
-   for f in ~/www/pstack-opencode/agents/*.md; do ln -sf "$f" ~/.config/opencode/agents/; done
-   ln -sf ~/www/pstack-opencode/commands/poteto-mode.md ~/.config/opencode/commands/
-   ```
-
-3. Restart OpenCode. Verify with `opencode debug skill` (should list all 40) and `opencode agent list` (should show the five `poteto-*` subagents).
+Restart OpenCode, then verify with `opencode debug skill` (should list all 40) and `opencode agent list` (should show the five `poteto-*` subagents).
 
 Edits to any file here apply on the next OpenCode restart.
 
