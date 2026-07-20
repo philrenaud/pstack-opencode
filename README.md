@@ -2,6 +2,8 @@
 
 An [OpenCode](https://opencode.ai) port of [pstack](https://github.com/cursor/plugins/tree/main/pstack), Lauren Tan (poteto)'s rigorous-engineering plugin for Cursor. MIT licensed upstream, which explicitly invites forks. All credit for the substance to her; this repo adapts the plumbing.
 
+Lives at [github.com/philrenaud/pstack-opencode](https://github.com/philrenaud/pstack-opencode). Ported from upstream v0.11.3.
+
 pstack is a discipline layer for coding agents: playbooks that force reproduction before fixes, principles the agent must cite when they shape a decision, multi-model adversarial review, and anti-slop prose rules. Almost all of it is markdown, which is why it ports.
 
 ## Layout
@@ -14,7 +16,13 @@ commands/   /poteto-mode slash command
 
 ## Install
 
-This repo is the live source of truth; nothing is copied.
+Clone it, then point OpenCode at the clone. The clone is the live source of truth; nothing is copied.
+
+```sh
+git clone https://github.com/philrenaud/pstack-opencode.git ~/www/pstack-opencode
+```
+
+Paths below assume `~/www/pstack-opencode`; adjust if you cloned elsewhere.
 
 1. Skills, via `skills.paths` in `~/.config/opencode/opencode.jsonc`:
 
@@ -51,7 +59,7 @@ Cursor passes a `model:` parameter per subagent call. OpenCode pins models on na
 | `poteto-gpt` | second panel family | `openrouter/openai/gpt-5.2` |
 | `poteto-grok` | fast exploration, third panel family | `openrouter/x-ai/grok-4.5` |
 
-The three panelists should stay on three different model families: cross-model agreement is the signal `interrogate` and `arena` rely on. Change a `model:` line (or run `/setup-pstack`) and restart to remap.
+The three panelists should stay on three different model families: cross-model agreement is the signal `interrogate` and `arena` rely on. The pinned models assume an OpenRouter provider; on a different provider, run `/setup-pstack` (or edit the `model:` lines) and restart to remap. Model IDs must appear in `opencode models` output.
 
 ## What changed from upstream
 
