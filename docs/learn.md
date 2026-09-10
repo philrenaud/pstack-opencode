@@ -1,8 +1,13 @@
 # Learn pstack from your terminal
 
+![OpenTUI learner with catalog and invocation details](images/learn-opentui.png)
+
+Captured from the OpenTUI renderer with demo history. To regenerate on macOS, run `bun tools/learn/capture.ts .audit/learn-capture.json`, then `swift scripts/render-learn-capture.swift .audit/learn-capture.json docs/images/learn-opentui.png`.
+
 Run this from the pstack-opencode clone:
 
 ```sh
+bun install --frozen-lockfile --cwd tools/learn
 ./learn
 ```
 
@@ -17,11 +22,13 @@ The dashboard lists skills, principles, and poteto-mode playbooks from the files
 
 Press `u` to see only capabilities not observed in the selected history. Press `n` to jump to a suggested capability. Suggestions use a fixed beginner-friendly order followed by an alphabetical fallback. They are ideas to try, not assessments of your proficiency.
 
-Press **Enter** to open up to five recent examples for the selected capability, newest first. Each shows the actual load or read, date, session title, project directory, and a session-resume command. The title gives task context; it is not a reconstructed prompt or proof of completed execution. Use arrows or Page Up/Down to scroll and Escape to return. Examples respect the current project, time-window, and child-session filters. The tool reads only event and session metadata, not message bodies.
+Press **Enter** to open up to five recent examples for the selected capability, newest first. Select an example with arrows or `j`/`k`, then press **Enter again** to see its exact conversation context. The excerpt includes the nearest original user request, nearby assistant messages, and the actual tool event in chronological order. Escape returns to examples, then to the catalog.
+
+Examples respect the current project, time-window, and child-session filters. Only opening exact context reads message text, on demand, for the selected event's session. Synthetic tool echoes, file dumps, hidden reasoning, and tool outputs are excluded. Excerpts show at most two assistant messages before and after the event and stop before the next original user turn. Long text is capped with explicit truncation notices. Session IDs and resume commands remain available for the full conversation. Missing event IDs or unsupported history show an unavailable explanation rather than a guessed match.
 
 ## Understand the evidence
 
-The dashboard reads local OpenCode tool metadata through a read-only SQLite connection. It makes no model calls and uploads nothing.
+The dashboard reads local OpenCode tool metadata through a read-only SQLite connection. Exact context additionally reads original message text when you open it. It makes no model calls and uploads nothing. Background refresh, snapshots, and JSON reports do not fetch message bodies.
 
 - **Loads** count successful `skill` tool calls for this catalog.
 - **Reads** count successful reads of an exact skill or playbook file.
@@ -43,6 +50,7 @@ Use these keys to change the evidence scope:
 | Tab | Cycle skills, playbooks, principles, and all entries |
 | `?` | Show controls and evidence definitions |
 | Enter | Open recent examples for the selected capability |
+| Enter on an example | Open the original conversation around that event |
 | Right / Left | Focus details or the list |
 | Ctrl-D / Ctrl-U | Scroll the focused pane |
 | `q` / Ctrl-C | Quit and restore the terminal |
@@ -63,7 +71,9 @@ The default project is the working directory where you launch the tool. To run i
 
 `--db PATH` selects an explicit OpenCode database. `--catalog ROOT` selects another pstack catalog, mainly for verification. Missing data leaves the catalog usable with unknown usage. `--help` lists every flag.
 
-The tool requires Bun. Development checks require the locked dependencies:
+The interactive tool uses OpenTUI's native layout, styled panes, and scroll containers. It requires Bun 1.3 or later and the locked dependencies. Headless reports do not initialize the terminal renderer. Development checks:
+
+Down and Page Down keep the selected catalog row visible. Home and End jump to the first and last entries. Selection stays within the catalog pane; the explanation remains independently scrollable.
 
 ```sh
 bun install --frozen-lockfile --cwd tools/learn

@@ -1081,6 +1081,8 @@ test("observed evidence includes newest recent examples capped to five", async (
     expect(how.evidence.recentExamples?.[0]?.kind).toBe("read");
     expect(how.evidence.recentExamples?.[0]?.action).toBe(`read(${join(root, "skills/how/SKILL.md")})`);
     expect(how.evidence.recentExamples?.[0]?.sessionTitle).toBe("Newest Session");
+    expect(how.evidence.recentExamples?.[0]?.partId).toBe("e6");
+    expect(how.evidence.recentExamples?.[0]?.messageId).toBe("msg-e6");
     expect(how.evidence.recentExamples?.[4]?.at).toBe(new Date(now - 6 * DAY).toISOString());
   }
   store.close();

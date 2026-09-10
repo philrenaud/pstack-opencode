@@ -6,7 +6,7 @@ Catalog discovery, keyword search, category navigation, narrow detail, invocatio
 
 ## How to get to it (user POV)
 
-Run `./learn`. Press `/` to search and select with arrow keys. Press Right for details on a narrow screen. Enter opens recent examples at any width; Escape returns. Press `p` to print the invocation and exit.
+Run `./learn`. Press `/` to search and select with arrow keys. Press Right for details on a narrow screen. Enter opens recent examples at any width; Enter on an example opens exact original conversation context. Escape returns one level. Press `p` to print the invocation and exit.
 
 ## Driving it with the PTY helper
 
