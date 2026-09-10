@@ -5,7 +5,7 @@ description: "Use for \"interrogate\", \"adversarial review\", \"multi-model rev
 
 # Interrogate
 
-Spawn one reviewer per configured model to adversarially review code changes. Each model gets the same prompt and rubric. The adversarial signal comes from model diversity, not assigned personas. Models differ in blind spots, priors, and reasoning patterns. Agreement across models is high-confidence signal; lone-model findings are worth reading but lower confidence.
+Spawn one reviewer per configured model to adversarially review code changes. Each model gets the same prompt and rubric. The adversarial signal comes from model diversity, not assigned personas.
 
 The deliverable is a synthesized verdict. Do NOT auto-apply changes.
 
@@ -21,24 +21,29 @@ Package the diff (or file contents) plus any surrounding context files the revie
 
 ## Step 2, State the Intent
 
-Before spawning reviewers, state the intent explicitly. What is this code trying to accomplish? Derive this from:
+Before spawning reviewers, state the intent explicitly. Derive this from:
 
 - The user's message
 - Commit messages
 - PR description if one exists
 - The code itself
 
-Write one clear paragraph. Reviewers challenge whether the work achieves the intent well, not whether the intent itself is correct. If you're unsure about the intent, ask the user before proceeding.
+Write one clear paragraph. If you're unsure about the intent, ask the user before proceeding.
 
 ## Step 3, Spawn Reviewers
 
-Launch one reviewer per panelist agent (defaults `poteto-claude`, `poteto-gpt`, `poteto-grok`; models are pinned in the pstack repo's `agents/` directory), all in a single message so they run in parallel.
+Launch all reviewers in a single message using the Task tool. Default to the four agents below. If the caller names a panel, use one Task per named agent and adjust the reviewer labels to its size. `/setup-pstack` configures each agent's model.
 
-For each reviewer:
-- `subagent_type`: one panelist agent from the configured interrogate list
-- Prompt instruction: review only, do not edit files
+| Reviewer | `subagent_type` |
+|----------|---------------|
+| Reviewer A | `poteto-claude` |
+| Reviewer B | `poteto-gpt` |
+| Reviewer C | `poteto-grok` |
+| Reviewer D | `poteto-opus` |
 
-If a panelist agent is rejected as unknown when you try to spawn it, check the valid subagent types in the Task tool's error message, fall back to `general` for that seat so the review still runs, and flag that the pstack agents are not installed (see the repo README's install section). Do not block the review on the missing agent.
+For each reviewer, use its `subagent_type` and include "Review only. Do not edit files." in the prompt.
+
+If an agent's model is unavailable, inspect `opencode models` and use `/setup-pstack` to select an available equivalent. Agent changes require an OpenCode restart. Continue with available reviewers and report the missing seat rather than claiming a full panel.
 
 Read `references/reviewer-prompt.md` and fill in the template with:
 1. The stated intent
@@ -47,8 +52,6 @@ Read `references/reviewer-prompt.md` and fill in the template with:
 4. The code-quality lens from `references/code-quality-review.md`
 
 The same filled template goes to all reviewers, so every model applies the code-quality lens.
-
-Each reviewer produces structured findings as described in the prompt template.
 
 ## Step 4, Synthesize
 
@@ -64,7 +67,7 @@ As results come back, build a unified picture:
 
 You are the lead reviewer, a pragmatic senior engineer, not a neutral aggregator.
 
-Read `references/lead-judgment.md` for the full framework. Reviewers only see a slice of the codebase. You have the full context (the goal, the constraints, the timeline, which tradeoffs were already considered). Use that context aggressively.
+Read `references/lead-judgment.md` for the full framework.
 
 Categorize every finding using these buckets:
 
@@ -86,7 +89,7 @@ Present the verdict in this structure:
 > [The stated intent paragraph from Step 2]
 
 ### Reviewers
-List each reviewer on its own line like `- <model name>: [N findings]`
+- Reviewer [label]: [model name], [N findings] (one bullet per reviewer)
 
 ### Act On
 [Findings that should be addressed. For each: description, which models raised it, why it matters.]
@@ -98,7 +101,7 @@ List each reviewer on its own line like `- <model name>: [N findings]`
 [Valid but low-priority. Brief list.]
 
 ### Dismissed
-[Rejected findings with brief rationale. This shows the user what was filtered out and why, so they can override your judgment if they disagree.]
+[Rejected findings with brief rationale.]
 
 ### Agreement Map
 [Where did models agree, where did they diverge, and what does the pattern of agreement/disagreement tell us?]

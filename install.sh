@@ -24,7 +24,7 @@ if [ -z "$CONFIG_FILE" ]; then
 }
 EOF
   echo "created $CONFIG_DIR/opencode.json with skills.paths"
-elif grep -q "pstack-opencode/skills" "$CONFIG_FILE"; then
+elif grep -qF "\"$REPO_DIR/skills\"" "$CONFIG_FILE"; then
   echo "skills path already registered in $CONFIG_FILE"
 else
   # Config exists but doesn't reference this repo. Editing JSONC from bash is a
@@ -38,8 +38,8 @@ fi
 
 echo ""
 echo "Restart OpenCode, then verify:"
-echo "  opencode debug skill        # should list the 40 pstack skills"
-echo "  opencode agent list         # should show the five poteto-* subagents"
+echo "  opencode debug skill        # should list the pstack skills in this clone"
+echo "  opencode agent list         # should show poteto-* and comment-sicko"
 echo ""
-echo "The agents pin OpenRouter models. On a machine with different providers,"
+echo "All pstack roles pin GitHub Copilot models. To choose other available models,"
 echo "run /setup-pstack inside OpenCode (or edit agents/*.md) to remap."

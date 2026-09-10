@@ -9,19 +9,13 @@ Mine the current conversation for durable learnings, then route them into skill 
 
 ## When to invoke
 
-- The user said "reflect" or "/reflect".
-- A complex task (5+ tool calls) just landed cleanly and the recipe is worth keeping.
-- The agent hit dead ends, found the working path, and the path generalizes.
-- The user corrected the agent's approach mid-task.
-- A non-trivial workflow emerged that isn't captured anywhere.
-
-Skip when the conversation is trivial, off-topic, or already covered by an existing skill the parent followed correctly. One-offs are not learnings.
+Invoke when the user says "reflect" or "/reflect". Skip when the conversation is trivial, off-topic, or already covered by an existing skill the parent followed correctly. One-offs are not learnings.
 
 ## Process
 
 ### 1. Locate the active transcript
 
-The parent finds its own session before fanning out. Use the CLI: `opencode session list` to find recent sessions, `opencode export <sessionID>` to dump one as JSON. Stay within the current project's sessions. Other projects' sessions are private chats from unrelated work.
+The parent locates this project's session with `opencode session list` and exports it with `opencode export <sessionID>`. Confirm the project and opening user message match before reading it. Do not inspect other projects' sessions.
 
 ```bash
 opencode session list
@@ -32,29 +26,29 @@ For each candidate, check that the export's opening user message contains this c
 
 ### 2. Spawn three reviewers in parallel
 
-One message, three `Task` calls, one per reviewer agent (table below). Model choices are configured per agent in this repo's `agents/` directory. Reviewers need MCP access for context lookups (tickets, chat threads, observability traces referenced in the transcript). The prompt forbids file writes (review only, do not edit files); the parent applies edits.
+One message, three `Task` calls using the agents below. Include "Review only. Do not edit files." in each prompt. Reviewers may use available MCP tools for context lookups.
 
 | Lens | `subagent_type` | Prompt template |
 |---|---|---|
 | Judgment | `poteto-claude` | `references/judgment-reviewer.md` |
-| Tooling | `poteto-grok` | `references/tooling-reviewer.md` |
+| Tooling | `poteto-gpt` | `references/tooling-reviewer.md` |
 | Divergent | `poteto-claude` | `references/divergent-reviewer.md` |
 
 Pass each template verbatim, substituting the transcript path or digest where marked. Reviewers return findings in the `Task` response body.
 
 ### 3. Synthesize
 
-One `Task` call, `subagent_type: poteto-claude`. The synthesizer's quality check includes spot-verifying citations, which can require MCP access; its prompt forbids file writes. Use `references/synthesizer.md` verbatim, with each reviewer's full output inlined where marked. The synthesizer returns a structured Accepted / Rejected / Backlog list.
+One `Task` call with `subagent_type: "poteto-claude"`. Include "Review only. Do not edit files." The synthesizer's quality check includes spot-verifying citations with available MCP tools. Use `references/synthesizer.md` verbatim, with each reviewer's full output inlined where marked. The synthesizer returns a structured Accepted / Rejected / Backlog list.
 
 ### 4. Structural enforcement check
 
-Sanity-check the synthesizer's Accepted list. For any item that would be enforced more reliably by a lint rule, script, metadata flag, or runtime check, move it from Accepted to Backlog. The synthesizer already applies this criterion; this is a final pass before edits land. See the **encode-lessons-in-structure** principle skill.
+Sanity-check the synthesizer's Accepted list. For any item that would be enforced more reliably by a lint rule, script, metadata flag, or runtime check, move it from Accepted to Backlog. See the **encode-lessons-in-structure** principle skill.
 
 ### 5. Apply
 
-Before applying any Accepted edit, present the synthesizer's full Accepted/Rejected/Backlog output to the user and wait for explicit approval. The user picks which subset to apply and may redirect routings. Skill changes affect every future agent in the org; do not auto-apply.
+Before applying any Accepted edit, present the synthesizer's full Accepted/Rejected/Backlog output to the user and wait for explicit approval. The user picks which subset to apply and may redirect routings. Skill changes affect every future agent in the org. Do not auto-apply.
 
-Backlog items file to whatever devex / backlog tracker your team uses automatically. Those are tracker submissions, not skill edits. Only the Accepted list waits for approval.
+Backlog items file to whatever devex / backlog tracker your team uses automatically. Only the Accepted list waits for approval.
 
 For each approved Accepted item, follow the Routing field exactly:
 

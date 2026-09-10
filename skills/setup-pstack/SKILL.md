@@ -11,29 +11,31 @@ pstack routes models through named OpenCode agents rather than per-call model pa
 
 | Agent | Role | Used by |
 | --- | --- | --- |
-| `poteto-agent` | general delegate, inherits the caller's model | playbook delegates, plan exploration |
-| `poteto-coder` | fast, precisely specified implementation | feature, bug-fix, perf, hillclimb, refactoring delegates |
-| `poteto-claude` | judgment, prose, synthesis panelist | how explainer, why synthesizer, reflect judgment, interrogate/arena/architect panels |
-| `poteto-gpt` | second panelist family | interrogate/arena/architect panels, how critics |
-| `poteto-grok` | fast exploration plus third panelist family | how explorer, why investigators, reflect tooling, panels |
+| `poteto-agent` | general delegate, GPT through Copilot | playbook delegates, plan exploration |
+| `poteto-coder` | fast, precisely specified mechanical implementation | feature and refactoring delegates |
+| `poteto-claude` | judgment, prose, difficult code, synthesis | how explainer, why synthesizer, reflect judgment/divergent, bug-fix/perf/hillclimb, panels |
+| `poteto-gpt` | second panelist family | interrogate/arena/architect panels, reflect tooling |
+| `poteto-grok` | fast exploration plus third panelist family | how explorer, why investigators, swarm, panels |
+| `poteto-opus` | fourth panel seat | interrogate/arena/architect panels |
+| `comment-sicko` | comment cleanup, Claude through Copilot | no-comments |
 
 ## Steps
 
 ### 1. Detect available models
 
-Run `opencode models`. That list is the dependable source; never write a model ID you have not seen in it. Model IDs are `provider/model-id` (for example `openrouter/anthropic/claude-opus-4.8`).
+Run `opencode models github-copilot`. This port uses GitHub Copilot for every role, including general delegates, comment cleanup, and the `/poteto-mode` command. Never write a model ID you have not seen in the detected list. Model IDs are `provider/model-id`, such as `github-copilot/claude-opus-5`. Change providers only when the user explicitly requests it.
 
 ### 2. Load current state
 
-Read every file in this repo's `agents/` directory and collect each agent's `model:` frontmatter line (absent means it inherits the caller's model).
+Read every file in this repo's `agents/` directory and `commands/poteto-mode.md`. Collect each `model:` frontmatter line. A missing line inherits the caller's model and does not guarantee the Copilot-only policy.
 
 ### 3. Map and confirm
 
-Show every agent with its current model, marking any whose model is not in the detected list as needing a choice. Use the `question` tool to ask whether to accept as-is or change specific agents, offering detected models as options. Panel diversity matters: `poteto-claude`, `poteto-gpt`, and `poteto-grok` should stay on three different model families, since cross-model agreement is the signal `interrogate` and `arena` rely on.
+Show every role with its current model, marking missing pins and unavailable models as needing a choice. If the user already specified the provider or models, apply that choice directly. Otherwise use `question` to offer detected Copilot models. Keep at least three model families across the panel. The defaults use Sonnet and Opus from Anthropic, GPT from OpenAI, and Gemini from Google. `poteto-grok` is the existing routing name for the Gemini seat; agent names do not determine their model family.
 
 ### 4. Validate and write
 
-Every model ID written must be in the detected list. Edit only the `model:` frontmatter line of each agent file; leave prompts and permissions alone. Re-runs stay idempotent.
+Every model ID written must appear in the detected list and start with `github-copilot/`. Edit only the `model:` frontmatter lines in agents and the command. Leave prompts and permissions alone. Re-runs stay idempotent. If the user explicitly requests `inherit-parent` or `auto`, explain that inheritance no longer guarantees Copilot-only routing, then remove the pin. Never write those aliases as model IDs.
 
 ### 5. Confirm
 
