@@ -1,0 +1,399 @@
+import { spawnSync } from "node:child_process";
+import { basename } from "node:path";
+import { stringWidth } from "bun";
+import type { Capability, CapabilityObservation, HistoryResult, SnapshotResult, WindowKind } from "./types";
+import { stripControlAndAnsi } from "./types";
+
+export type CategoryTab = "all" | "skills" | "playbooks" | "principles";
+export type FocusPane = "list" | "detail" | "examples";
+
+export interface UiState {
+  selected: number;
+  listOffset: number;
+  detailOffset: number;
+  category: CategoryTab;
+  hideObserved: boolean;
+  search: string;
+  searching: boolean;
+  focus: FocusPane;
+  examplesReturnFocus: "list" | "detail";
+  narrowDetail: boolean;
+  help: boolean;
+  allProjects: boolean;
+  includeSubagents: boolean;
+  window: WindowKind;
+  status?: string;
+  examplesOffset: number;
+}
+
+export interface CapWithObservation {
+  capability: Capability;
+  observation: CapabilityObservation | undefined;
+}
+
+const TRY_NEXT_ORDER: ReadonlyArray<string> = [
+  "skill:how", "skill:architect", "skill:figure-it-out", "skill:swarm", "skill:interrogate",
+  "skill:show-me-your-work", "skill:create-verification-skill", "playbook:investigation",
+  "playbook:feature", "playbook:bug-fix", "playbook:prototype", "playbook:refactoring",
+  "playbook:perf-issue", "playbook:runtime-forensics", "playbook:trace-forensics",
+  "playbook:multi-phase-plan", "playbook:autonomous-run", "playbook:orchestrate",
+  "playbook:babysit", "playbook:shipping",
+];
+
+export function createInitialState(): UiState {
+  return {
+    selected: 0, listOffset: 0, detailOffset: 0, category: "all", hideObserved: false,
+    search: "", searching: false, focus: "list", examplesReturnFocus: "list", narrowDetail: false, help: false,
+    allProjects: false, includeSubagents: false, window: "30",
+    examplesOffset: 0,
+  };
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(value, max));
+}
+
+export function isSplitLayout(width: number): boolean {
+  return width >= 100;
+}
+
+export function listVisibleRows(height: number): number {
+  return Math.max(1, height - 9);
+}
+
+function paneDimensions(width: number, height: number): {
+  lineWidth: number;
+  split: boolean;
+  bodyHeight: number;
+  leftWidth: number;
+  rightWidth: number;
+} {
+  const lineWidth = Math.max(0, width - 1);
+  const split = isSplitLayout(width);
+  const bodyHeight = Math.max(1, height - 8);
+  if (!split) {
+    return { lineWidth, split, bodyHeight, leftWidth: lineWidth, rightWidth: lineWidth };
+  }
+  const leftWidth = Math.min(clamp(Math.floor(lineWidth * 0.48), 43, 64), Math.max(43, lineWidth - 41));
+  return {
+    lineWidth,
+    split,
+    bodyHeight,
+    leftWidth,
+    rightWidth: lineWidth - leftWidth - 1,
+  };
+}
+
+function kindMatches(tab: CategoryTab, kind: Capability["kind"]): boolean {
+  return tab === "all" || (tab === "skills" && kind === "skill") ||
+    (tab === "playbooks" && kind === "playbook") || (tab === "principles" && kind === "principle");
+}
+
+function searchable(capability: Capability): string {
+  return `${capability.name} ${capability.summary} ${capability.invocation}`.toLowerCase();
+}
+
+export function filterCapabilities(snapshot: SnapshotResult, state: UiState): CapWithObservation[] {
+  const byId = new Map(snapshot.observations.map((observation) => [observation.capabilityId, observation]));
+  const query = state.search.trim().toLowerCase();
+  return snapshot.catalog.capabilities
+    .map((capability) => ({ capability, observation: byId.get(capability.id) }))
+    .filter(({ capability, observation }) => kindMatches(state.category, capability.kind) &&
+      (!state.hideObserved || observation?.evidence.kind === "not-observed") &&
+      (!query || searchable(capability).includes(query)));
+}
+
+export function suggestion(snapshot: SnapshotResult): Capability | undefined {
+  const byId = new Map(snapshot.observations.map((observation) => [observation.capabilityId, observation]));
+  const eligible = (capability: Capability): boolean => byId.get(capability.id)?.evidence.kind === "not-observed";
+  for (const id of TRY_NEXT_ORDER) {
+    const capability = snapshot.catalog.capabilities.find((item) => item.id === id);
+    if (capability && eligible(capability)) return capability;
+  }
+  return snapshot.catalog.capabilities
+    .filter((capability) => capability.kind !== "principle" && eligible(capability))
+    .sort((a, b) => a.name.localeCompare(b.name))[0];
+}
+
+function clip(text: string, width: number): string {
+  if (width <= 0) return "";
+  let result = "";
+  for (const character of text) {
+    if (stringWidth(result + character) > width) break;
+    result += character;
+  }
+  return result;
+}
+
+function fit(text: string, width: number): string {
+  const safe = text.replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, "").replace(/[\x00-\x1f\x7f-\x9f]/g, " ");
+  const result = clip(safe, Math.max(0, width));
+  return result + " ".repeat(Math.max(0, width - stringWidth(result)));
+}
+
+function wrap(text: string, width: number): string[] {
+  if (width < 1 || !text) return [""];
+  const lines: string[] = [];
+  let remaining = stripControlAndAnsi(text).replace(/[\r\n\t]/g, " ").trim();
+  while (remaining) {
+    if (stringWidth(remaining) <= width) {
+      lines.push(remaining);
+      break;
+    }
+    const candidate = clip(remaining, width);
+    const breakAt = candidate.lastIndexOf(" ");
+    const take = breakAt > 0 ? candidate.slice(0, breakAt) : candidate;
+    lines.push(take);
+    remaining = remaining.slice(take.length).trimStart();
+  }
+  return lines.length ? lines : [""];
+}
+
+function splitAtDisplayWidth(text: string, width: number): [string, string] {
+  if (width <= 0) return ["", text];
+  const characters = [...text];
+  let display = 0;
+  let index = 0;
+  while (index < characters.length) {
+    const character = characters[index] ?? "";
+    const nextWidth = stringWidth(character);
+    if (display + nextWidth > width) break;
+    display += nextWidth;
+    index += 1;
+    if (display === width) {
+      while (index < characters.length && stringWidth(characters[index] ?? "") === 0) index += 1;
+      break;
+    }
+  }
+  return [characters.slice(0, index).join(""), characters.slice(index).join("")];
+}
+
+export function styleFrame(frame: string[], width: number, enabled: boolean): string[] {
+  if (!enabled) return frame;
+  const dims = paneDimensions(width, frame.length);
+  return frame.map((line, index) => {
+    if (index === 0) return `\u001b[1;36m${line}\u001b[0m`;
+    if (line.startsWith("HISTORY UNKNOWN") || line.startsWith("WARNING")) return `\u001b[33m${line}\u001b[0m`;
+    if (!/^>\s\s(?:SK|PB|PR)\s\s/.test(line)) return line;
+    if (!dims.split) return `\u001b[7;36m${line}\u001b[0m`;
+    const [left, right] = splitAtDisplayWidth(line, dims.leftWidth);
+    return `\u001b[7;36m${left}\u001b[0m${right}`;
+  });
+}
+
+function counts(observation?: CapabilityObservation): { loads: string; reads: string; status: string } {
+  if (observation?.evidence.kind === "observed") {
+    return { loads: String(observation.evidence.count.loads), reads: String(observation.evidence.count.reads), status: "observed" };
+  }
+  if (observation?.evidence.kind === "not-observed") return { loads: "0", reads: "0", status: "not observed" };
+  return { loads: "-", reads: "-", status: "unknown" };
+}
+
+function typeBadge(kind: Capability["kind"]): string {
+  return kind === "skill" ? "SK" : kind === "playbook" ? "PB" : "PR";
+}
+
+function detailLines(item: CapWithObservation, width: number): string[] {
+  const contentWidth = Math.max(1, width - 1);
+  const add = (label: string, text: string) => {
+    const prefix = `${label} `;
+    const wrapped = wrap(text, Math.max(1, contentWidth - stringWidth(prefix)));
+    lines.push(prefix + (wrapped.shift() ?? ""), ...wrapped.map((line) => " ".repeat(stringWidth(prefix)) + line));
+  };
+  const lines: string[] = [`[${typeBadge(item.capability.kind)}] ${item.capability.name}`, ""];
+  add("INVOKE", item.capability.invocation);
+  lines.push("");
+  add("WHY", item.capability.whyTry);
+  lines.push("");
+  add("ABOUT", item.capability.summary);
+  const evidence = counts(item.observation);
+  lines.push("", `EVIDENCE  ${evidence.status}  loads ${evidence.loads}  reads ${evidence.reads}`);
+  if (item.observation?.evidence.kind === "observed") {
+    lines.push(`LAST SEEN ${new Date(item.observation.evidence.lastSeenAt).toLocaleString()}`);
+  }
+  lines.push("");
+  add("SOURCE", item.capability.sourcePath);
+  return lines;
+}
+
+function formatTime(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.valueOf()) ? value : date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+function scopeLabel(snapshot: SnapshotResult, state: UiState): string {
+  if (state.allProjects) return "all projects";
+  return basename(snapshot.options.projectPath ?? "current project") || "current project";
+}
+
+function evidenceSummary(snapshot: SnapshotResult): string {
+  let observed = 0, notObserved = 0, unknown = 0, loads = 0, reads = 0;
+  for (const observation of snapshot.observations) {
+    if (observation.evidence.kind === "observed") {
+      observed += 1; loads += observation.evidence.count.loads; reads += observation.evidence.count.reads;
+    } else if (observation.evidence.kind === "not-observed") notObserved += 1;
+    else unknown += 1;
+  }
+  return `${observed} observed (${loads} loads, ${reads} reads)  ${notObserved} not observed  ${unknown} unknown`;
+}
+
+function helpLines(snapshot: SnapshotResult): string[] {
+  return [
+    "HELP", "", "Navigation", "  j/k or arrows  select       PgUp/PgDn/Home/End  move", "  Enter          examples     Esc                 back/close", "  left/right      focus pane   Ctrl-D/Ctrl-U       half page", "", "Explore", "  / search   Tab category   u show only not observed   n try next", "", "Evidence", "  loads = successful skill tool loads", "  reads = opened exact SKILL.md/playbook path", "  not observed = zero matching evidence in this scope and window", "  unknown = history unavailable; it is never treated as not observed", "", "Scope and actions", "  w window   s project/all   a include subagents   r refresh", "  c copy invocation (never runs it)   p print invocation and exit", "  q or Ctrl-C exit   ? or Esc close help", "", `Database: ${snapshot.options.dbPath ?? "not found"}`, "Metadata only proves a load or read, not that a workflow was completed.",
+  ];
+}
+
+export function renderSnapshotText(snapshot: SnapshotResult, width: number, height: number): string[] {
+  const state = createInitialState();
+  state.allProjects = snapshot.options.scope === "all-projects";
+  state.includeSubagents = snapshot.options.includeSubagents;
+  state.window = snapshot.options.window;
+  return renderFrame(snapshot, state, width, height);
+}
+
+export function detailScrollLimit(snapshot: SnapshotResult, state: UiState, width: number, height: number): number {
+  const filtered = filterCapabilities(snapshot, state);
+  const selected = filtered[Math.min(state.selected, Math.max(0, filtered.length - 1))];
+  if (!selected) return 0;
+  const dims = paneDimensions(width, height);
+  const paneWidth = dims.split ? dims.rightWidth : dims.lineWidth;
+  const visible = dims.split ? listVisibleRows(height) : dims.bodyHeight;
+  return Math.max(0, detailLines(selected, paneWidth).length - visible);
+}
+
+function exampleType(kind: "load" | "read"): string {
+  return kind === "load" ? "load" : "read";
+}
+
+function examplesLines(item: CapWithObservation, history: HistoryResult, width: number): string[] {
+  const contentWidth = Math.max(1, width);
+  const lines: string[] = ["RECENT EXAMPLES", ""];
+  const add = (label: string, text: string) => {
+    const prefix = `${label} `;
+    const wrapped = wrap(text, Math.max(1, contentWidth - stringWidth(prefix)));
+    lines.push(prefix + (wrapped.shift() ?? ""), ...wrapped.map((line) => " ".repeat(stringWidth(prefix)) + line));
+  };
+  const addWrapped = (text: string) => lines.push(...wrap(text, contentWidth));
+  add("INVOKE", item.capability.invocation);
+  lines.push("");
+  if (item.observation?.evidence.kind === "observed") {
+    const examples = item.observation.evidence.recentExamples ?? [];
+    if (examples.length === 0) {
+      addWrapped("No recorded examples in this scope and window. Try this invocation:");
+      addWrapped(item.capability.invocation);
+    } else {
+      for (const sample of examples.slice(0, 5)) {
+        add("DATE", new Date(sample.at).toLocaleString());
+        add("TYPE", exampleType(sample.kind));
+        add("CONTEXT", sample.sessionTitle);
+        add("PROJECT", sample.directory);
+        add("ACTION", sample.action);
+        add("SESSION", sample.sessionId);
+        add("RESUME", `opencode -s ${sample.sessionId}`);
+        lines.push("");
+      }
+    }
+    addWrapped("load = successful skill tool load; read = opened exact SKILL.md/playbook.");
+    addWrapped("Consultation only; not proof of completed execution.");
+    return lines;
+  }
+  if (item.observation?.evidence.kind === "not-observed") {
+    addWrapped("No recorded examples in this scope and window. Try this invocation:");
+    addWrapped(item.capability.invocation);
+    lines.push("");
+    addWrapped("Consultation only; not proof of completed execution.");
+    return lines;
+  }
+  const reason = history.kind === "unavailable" ? history.reason : "unknown";
+  addWrapped(`Examples unavailable because history is unknown (${reason}).`);
+  lines.push("");
+  addWrapped("Consultation only; not proof of completed execution.");
+  return lines;
+}
+
+export function examplesScrollLimit(snapshot: SnapshotResult, state: UiState, width: number, height: number): number {
+  const filtered = filterCapabilities(snapshot, state);
+  const selected = filtered[Math.min(state.selected, Math.max(0, filtered.length - 1))];
+  if (!selected) return 0;
+  const dims = paneDimensions(width, height);
+  return Math.max(0, examplesLines(selected, snapshot.history, dims.lineWidth).length - dims.bodyHeight);
+}
+
+export function renderFrame(snapshot: SnapshotResult, state: UiState, width: number, height: number): string[] {
+  const dims = paneDimensions(width, height);
+  const { lineWidth } = dims;
+  if (width < 40 || height < 12) return [fit("resize terminal to 40x12. q quits.", lineWidth)];
+  if (state.help) return helpLines(snapshot).slice(0, height).map((line) => fit(line, lineWidth));
+
+  const filtered = filterCapabilities(snapshot, state);
+  const selectedIndex = Math.min(state.selected, Math.max(0, filtered.length - 1));
+  const selected = filtered[selectedIndex];
+  const history = snapshot.history;
+  const refreshed = `${formatTime(history.readAt)} in ${history.durationMs}ms`;
+  const sessions = history.kind === "available" ? String(history.sessionCount) : "unknown";
+  const rows = [
+    fit("pstack learn", lineWidth),
+    fit(`${scopeLabel(snapshot, state)}  |  ${state.window === "all" ? "all time" : `${state.window} days`}  |  subagents ${state.includeSubagents ? "included" : "excluded"}  |  ${snapshot.catalog.capabilities.length} capabilities`, lineWidth),
+    fit(`[${state.category}]  ${evidenceSummary(snapshot)}  sessions ${sessions}`, lineWidth),
+  ];
+  if (history.kind === "unavailable") rows.push(fit(`HISTORY UNKNOWN: ${history.reason}`, lineWidth));
+  else if (history.warnings.length || snapshot.catalog.warnings.length) rows.push(fit(`WARNING: ${[...history.warnings, ...snapshot.catalog.warnings][0]}`, lineWidth));
+  else rows.push(fit("Evidence: loads are successful skill tool loads; reads are exact file consultations.", lineWidth));
+
+  if (state.focus === "examples") {
+    const detail = selected ? examplesLines(selected, snapshot.history, lineWidth) : ["No matching capabilities."];
+    for (let index = 0; index < dims.bodyHeight; index++) {
+      rows.push(fit(detail[state.examplesOffset + index] ?? "", lineWidth));
+    }
+  } else if (!dims.split && state.narrowDetail) {
+    const detail = selected ? detailLines(selected, lineWidth) : ["No matching capabilities."];
+    for (let index = 0; index < dims.bodyHeight; index++) rows.push(fit(detail[state.detailOffset + index] ?? "", lineWidth));
+  } else if (!dims.split) {
+    rows.push(fit("   TYPE NAME                                      LOADS READS", lineWidth));
+    const visible = filtered.slice(state.listOffset, state.listOffset + listVisibleRows(height));
+    for (let index = 0; index < listVisibleRows(height); index++) {
+      const item = visible[index];
+      if (!item) { rows.push(fit("", lineWidth)); continue; }
+      const absolute = state.listOffset + index;
+      const evidence = counts(item.observation);
+      const nameWidth = Math.max(8, lineWidth - 22);
+      rows.push(fit(`${absolute === selectedIndex ? ">" : " "}  ${typeBadge(item.capability.kind)}  ${fit(item.capability.name, nameWidth)} ${evidence.loads.padStart(5)} ${evidence.reads.padStart(5)}`, lineWidth));
+    }
+  } else {
+    rows.push(`${fit("   TYPE NAME                LOADS READS", dims.leftWidth)} ${fit("DETAIL", dims.rightWidth)}`);
+    const visible = filtered.slice(state.listOffset, state.listOffset + listVisibleRows(height));
+    const detail = selected ? detailLines(selected, dims.rightWidth) : ["No matching capabilities."];
+    for (let index = 0; index < listVisibleRows(height); index++) {
+      const item = visible[index];
+      let left = "";
+      if (item) {
+        const absolute = state.listOffset + index;
+        const evidence = counts(item.observation);
+        left = `${absolute === selectedIndex ? ">" : " "}  ${typeBadge(item.capability.kind)}  ${fit(item.capability.name, Math.max(8, dims.leftWidth - 20))} ${evidence.loads.padStart(5)} ${evidence.reads.padStart(5)}`;
+      }
+      rows.push(`${fit(left, dims.leftWidth)} ${fit(detail[state.detailOffset + index] ?? "", dims.rightWidth)}`);
+    }
+  }
+
+  const next = suggestion(snapshot);
+  rows.push(fit(next ? `Try next: ${next.name}. ${next.whyTry}` : "Try next: no not-observed workflow or playbook in this window.", lineWidth));
+  const search = state.searching ? `Search /${state.search}` : state.search ? `Search: ${state.search}` : "? help  / search";
+  rows.push(fit(`${search}  |  q quit  Tab category  n next  u not observed  w window  s scope  a subagents  r refresh`, lineWidth));
+  rows.push(fit(`Refreshed ${refreshed}${state.status ? `  |  ${state.status}` : ""}`, lineWidth));
+  return rows.slice(0, height);
+}
+
+export function applyCopy(text: string): string {
+  text = stripControlAndAnsi(text).replace(/[\r\n\t]/g, " ");
+  if (process.platform === "darwin") {
+    const pb = spawnSync("pbcopy", { input: text, encoding: "utf8", timeout: 1_000 });
+    if (pb.status === 0) return "copy requested: pbcopy";
+  }
+  const encoded = Buffer.from(text, "utf8").toString("base64");
+  process.stdout.write(`\u001b]52;c;${encoded}\u0007`);
+  return "copy requested: OSC 52";
+}
+
+export function historyWarnings(history: HistoryResult): string[] {
+  return history.warnings;
+}

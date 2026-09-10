@@ -1,0 +1,13 @@
+{
+  "name": "@pstack/learn",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "bun-types": "1.2.21",
+    "typescript": "5.9.2"
+  }
+}

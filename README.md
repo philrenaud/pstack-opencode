@@ -36,6 +36,8 @@ Edits to any file here apply on the next OpenCode restart.
 
 ## Use
 
+Run `./learn` for the interactive learning dashboard. It lists the installed skills and playbooks, shows recent loads and consultations, and gives a copyable invocation for each. Press `/` to search, `u` for not-observed entries, and `?` for help. See [the learner guide](docs/learn.md) for scope filters and evidence limits.
+
 - `/poteto-mode <task>` at the start of anything that needs rigor. It matches the task to a playbook (bug fix, feature, perf, refactoring, prototype, autonomous run, ...), copies the playbook steps into a todolist verbatim, and routes to the other skills as steps fire.
 - The other skills also load on demand when a task matches their description, or by asking for them by name: `how`, `why`, `interrogate` (multi-model adversarial review), `arena` (N parallel attempts, graft the best), `architect`, `unslop`, `tdd`, `teach`, `blast-radius`, `reflect`, `recall`, `automate-me`.
 - `setup-pstack` reconfigures which models the roles use.
