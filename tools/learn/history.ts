@@ -16,6 +16,7 @@ import type {
   UnavailableHistoryResult,
 } from "./types";
 import { toIso, WINDOW_DAYS } from "./types";
+import { recognizeInvocation, type KnownSkill } from "./invocation";
 
 interface SessionRow {
   id: string;
@@ -29,12 +30,14 @@ interface SessionRow {
 
 interface PartEvent {
   ts: number;
-  kind: "skill-load" | "file-read";
+  kind: "skill-invoke" | "skill-load" | "file-read";
   partId?: string;
   messageId?: string;
   skillName?: string;
   skillDir?: string;
   filePath?: string;
+  invocationPrefix?: string;
+  invocationFooter?: string;
 }
 
 interface SessionEvents {
@@ -70,9 +73,11 @@ interface CanonicalMaps {
   skillDirToSlug: Map<string, string>;
   readPathToCapability: Map<string, CapabilityId>;
   readPathSuffixes: Set<string>;
+  knownSkills: KnownSkill[];
 }
 
 interface Tally {
+  invokes: number;
   loads: number;
   reads: number;
   lastTs?: number;
@@ -209,7 +214,10 @@ async function buildCanonicalMaps(
     readPathToCapability.set(await tryRealpath(sourcePath, realpaths), capability.id);
     readPathSuffixes.add(lastTwoSegments(sourcePath));
   }
-  return { skillBySlug, skillDirToSlug, readPathToCapability, readPathSuffixes };
+  const knownSkills = [...skillBySlug.entries()].flatMap(([slug, capability]) =>
+    capability.sourceDir ? [{ slug, name: capability.name, sourceDir: resolve(capability.sourceDir) }] : [],
+  );
+  return { skillBySlug, skillDirToSlug, readPathToCapability, readPathSuffixes, knownSkills };
 }
 
 function ancestors(path: string): string[] {
@@ -240,7 +248,7 @@ function isString(value: unknown): value is string {
   return typeof value === "string" && value.length > 0;
 }
 
-function readColumns(db: Database, table: "session" | "part" | "project"): string[] {
+function readColumns(db: Database, table: "session" | "part" | "project" | "message"): string[] {
   const rows = db
     .query<{ name: unknown }, []>(`select name from pragma_table_info('${table}')`)
     .all();
@@ -290,6 +298,7 @@ export class HistoryStore {
   private sessionTitleColumn = false;
   private partIdColumn = false;
   private partMessageIdColumn = false;
+  private messageInvocationColumns = false;
 
   constructor(dbPath?: string) {
     this.dbInfo = discoverDbPath(dbPath);
@@ -330,6 +339,7 @@ export class HistoryStore {
     this.sessionTitleColumn = false;
     this.partIdColumn = false;
     this.partMessageIdColumn = false;
+    this.messageInvocationColumns = false;
   }
 
   /**
@@ -674,6 +684,41 @@ export class HistoryStore {
       }
       // Any other tool shape is explicitly not evidence.
     }
+    if (this.messageInvocationColumns) {
+      const invocationRows = db
+        .query<Record<string, unknown>, [string]>(
+          `select p.id as part_id, p.message_id, p.time_created,
+             substr(json_extract(p.data, '$.text'), 1, 256) as invocation_prefix,
+             case when instr(json_extract(p.data, '$.text'), char(10) || 'Base directory for this skill:') > 0
+               then substr(json_extract(p.data, '$.text'), instr(json_extract(p.data, '$.text'), char(10) || 'Base directory for this skill:'), 1024)
+               else null end as invocation_footer
+           from part p join message m on m.id = p.message_id and m.session_id = p.session_id
+           where p.session_id = ? and json_valid(p.data) and json_valid(m.data)
+             and json_extract(p.data, '$.type') = 'text'
+             and coalesce(json_extract(p.data, '$.synthetic'), 0) = 0
+             and typeof(json_extract(p.data, '$.text')) = 'text'
+             and json_extract(m.data, '$.role') = 'user'
+             and (substr(json_extract(p.data, '$.text'), 1, 1) = '/'
+               or substr(json_extract(p.data, '$.text'), 1, 2) = '# ')`,
+        )
+        .all(session.id);
+      for (const row of invocationRows) {
+        const prefix = row["invocation_prefix"];
+        const ts = parseMillis(row["time_created"]);
+        if (typeof prefix !== "string" || ts === undefined) continue;
+        const event: PartEvent = {
+          kind: "skill-invoke",
+          ts,
+          invocationPrefix: prefix,
+        };
+        if (typeof row["invocation_footer"] === "string") event.invocationFooter = row["invocation_footer"];
+        const partId = row["part_id"];
+        const messageId = row["message_id"];
+        if (isString(partId)) event.partId = partId;
+        if (isString(messageId)) event.messageId = messageId;
+        events.push(event);
+      }
+    }
     return { events, malformed };
   }
 
@@ -761,6 +806,10 @@ export class HistoryStore {
         this.sessionTitleColumn = sessionColumns.includes("title");
         this.partIdColumn = partColumns.includes("id");
         this.partMessageIdColumn = partColumns.includes("message_id");
+        const messageColumns = readColumns(db, "message");
+        this.messageInvocationColumns =
+          hasColumns(messageColumns, ["id", "session_id", "data"]) &&
+          this.partIdColumn && this.partMessageIdColumn;
         this.lastDataVersion = dataVersion;
       }
 
@@ -799,7 +848,7 @@ export class HistoryStore {
       const canonical = await buildCanonicalMaps(catalog, realpaths);
       const tallies = new Map<CapabilityId, Tally>();
       for (const capability of catalog.capabilities) {
-        tallies.set(capability.id, { loads: 0, reads: 0, examples: [] });
+        tallies.set(capability.id, { invokes: 0, loads: 0, reads: 0, examples: [] });
       }
 
       let sessionCount = 0;
@@ -822,7 +871,7 @@ export class HistoryStore {
           if (event.ts < cutoff) {
             continue;
           }
-          const record = (id: CapabilityId, field: "loads" | "reads"): void => {
+          const record = (id: CapabilityId, field: "invokes" | "loads" | "reads"): void => {
             const tally = tallies.get(id);
             if (!tally) {
               return;
@@ -841,7 +890,7 @@ export class HistoryStore {
             }
           };
 
-          const appendExample = (id: CapabilityId, kind: "load" | "read", action: string): void => {
+          const appendExample = (id: CapabilityId, kind: RecentExample["kind"], action: string, skillDir?: string, skillName?: string): void => {
             const tally = tallies.get(id);
             if (!tally) {
               return;
@@ -862,12 +911,32 @@ export class HistoryStore {
             if (event.messageId) {
               example.messageId = event.messageId;
             }
+            if (skillDir) example.skillDir = skillDir;
+            if (skillName) example.skillName = skillName;
             tally.examples.push({
               ts: event.ts,
               tie,
               example,
             });
           };
+
+          if (event.kind === "skill-invoke" && event.invocationPrefix) {
+            const invocation = recognizeInvocation(
+              { prefix: event.invocationPrefix, footer: event.invocationFooter },
+              canonical.knownSkills,
+            );
+            if (!invocation) continue;
+            const capability = canonical.skillBySlug.get(invocation.slug);
+            if (!capability?.sourceDir) continue;
+            record(capability.id, "invokes");
+            appendExample(
+              capability.id,
+              "invoke",
+              invocation.form === "raw" ? `/${invocation.slug}` : `invoke(${invocation.slug})`,
+              capability.sourceDir,
+              capability.name,
+            );
+          }
 
           if (event.kind === "skill-load" && event.skillName) {
             const capability = canonical.skillBySlug.get(event.skillName);
@@ -908,7 +977,7 @@ export class HistoryStore {
 
       const observations: CapabilityObservation[] = [...tallies.entries()].map(
         ([capabilityId, tally]) => {
-          const count = { loads: tally.loads, reads: tally.reads };
+          const count = { invokes: tally.invokes, loads: tally.loads, reads: tally.reads };
           let evidence: CapabilityEvidence;
           if (tally.lastTs !== undefined && tally.lastSessionId) {
             const recentExamples = tally.examples

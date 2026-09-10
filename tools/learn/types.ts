@@ -36,6 +36,7 @@ export interface LearnOptions {
 }
 
 export interface Count {
+  invokes: number;
   loads: number;
   reads: number;
 }
@@ -50,7 +51,7 @@ export interface ObservedEvidence {
 }
 
 export interface RecentExample {
-  kind: "load" | "read";
+  kind: "invoke" | "load" | "read";
   at: string;
   sessionId: string;
   sessionTitle: string;
@@ -59,6 +60,8 @@ export interface RecentExample {
   action: string;
   partId?: string;
   messageId?: string;
+  skillDir?: string;
+  skillName?: string;
 }
 
 export interface ContextMessage {

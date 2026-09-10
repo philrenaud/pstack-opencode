@@ -283,3 +283,40 @@ test("reports per-part and total truncation without changing original text", asy
     expect(result.warnings.some((warning) => warning.includes("truncated"))).toBeTrue();
   }
 });
+
+test("uses the invocation user message as the anchor and hides expanded instructions", async () => {
+  const dbPath = join(makeTempDir("learn-context-invoke-"), "events.db");
+  const db = createContextDb(dbPath);
+  db.query("insert into session values (?, ?)").run("session-a", null);
+  insertMessage(db, { id: "old-user", sessionId: "session-a", role: "user", at: 500 });
+  insertText(db, { id: "old-text", messageId: "old-user", sessionId: "session-a", at: 501, text: "Unrelated old request." });
+  insertMessage(db, { id: "invoke-user", sessionId: "session-a", role: "user", at: 1_000 });
+  insertText(db, {
+    id: "invoke-part",
+    messageId: "invoke-user",
+    sessionId: "session-a",
+    at: 1_001,
+    text: "# Teach\n\nPrivate expanded instructions.\n\nBase directory for this skill: /skills/teach\nRelative paths in this skill are relative.\n\nExplain render-learn-capture.swift.",
+  });
+  insertMessage(db, { id: "answer", sessionId: "session-a", role: "assistant", at: 2_000 });
+  insertText(db, { id: "answer-text", messageId: "answer", sessionId: "session-a", at: 2_001, text: "Here is the answer." });
+  db.close();
+
+  const result = await loadExampleContext(dbPath, example({
+    kind: "invoke",
+    action: "invoke(teach)",
+    partId: "invoke-part",
+    messageId: "invoke-user",
+    skillDir: "/skills/teach",
+  }));
+  expect(result.kind).toBe("available");
+  if (result.kind === "available") {
+    expect(result.messages.map((message) => message.text)).toEqual([
+      "Explain render-learn-capture.swift.",
+      "Here is the answer.",
+    ]);
+    expect(result.messages[0]?.relation).toBe("invocation");
+    expect(result.messages[0]?.role).toBe("user");
+    expect(result.warnings).toContain("Expanded skill instructions omitted; original task shown.");
+  }
+});

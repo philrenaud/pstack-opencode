@@ -113,7 +113,7 @@ function observationsFromHistory(history: HistoryResult, capabilityIds: Capabili
   }
   return capabilityIds.map((capabilityId) => ({
     capabilityId,
-    evidence: { kind: "unknown", count: { loads: 0, reads: 0 } },
+    evidence: { kind: "unknown", count: { invokes: 0, loads: 0, reads: 0 } },
   }));
 }
 

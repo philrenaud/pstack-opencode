@@ -3,6 +3,7 @@ import { constants } from "node:fs";
 import { Database } from "bun:sqlite";
 import type { ContextMessage, ExampleContext, RecentExample } from "./types";
 import { toIso } from "./types";
+import { recognizeInvocation, stripExpandedInvocation } from "./invocation";
 
 interface Anchor {
   messageId: string;
@@ -157,6 +158,38 @@ function unavailable(reason: string): ExampleContext {
   return { kind: "unavailable", reason };
 }
 
+function readInvocationAnchor(
+  db: Database,
+  example: RecentExample,
+): { message: MessageRow; text: TextRow; parentId: string | null; displayText: string; omitted: boolean } | undefined {
+  if (!example.partId || !example.messageId || !example.skillDir) return undefined;
+  const row = db.query<Record<string, unknown>, [string, string, string]>(
+    `select p.id as part_id, p.message_id, p.time_created, json_extract(p.data, '$.text') as text,
+       json_extract(p.data, '$.synthetic') as synthetic, json_extract(m.data, '$.role') as role,
+       m.time_created as message_created, s.parent_id
+     from part p join message m on m.id = p.message_id and m.session_id = p.session_id
+     join session s on s.id = p.session_id
+     where p.id = ? and p.message_id = ? and p.session_id = ? and json_valid(p.data) and json_valid(m.data)`,
+  ).get(example.partId, example.messageId, example.sessionId);
+  const text = row?.["text"];
+  const created = row?.["time_created"];
+  const messageCreated = row?.["message_created"];
+  if (!row || row["role"] !== "user" || row["synthetic"] === true || row["synthetic"] === 1 ||
+      typeof text !== "string" || !isNumber(created) || !isNumber(messageCreated)) return undefined;
+  const slug = example.action.startsWith("invoke(") ? example.action.slice(7, -1) : example.action.slice(1);
+  const skill = { slug, name: example.skillName ?? slug, sourceDir: example.skillDir };
+  const recognized = recognizeInvocation({ prefix: text.slice(0, 256), footer: text }, [skill]);
+  if (!recognized || (recognized.form === "expanded" ? `invoke(${slug})` : `/${slug}`) !== example.action) return undefined;
+  const stripped = recognized.form === "expanded" ? stripExpandedInvocation(text, skill) : undefined;
+  return {
+    message: { id: example.messageId, role: "user", created: messageCreated },
+    text: { id: example.partId, created, text },
+    parentId: isString(row["parent_id"]) ? row["parent_id"] : null,
+    displayText: stripped ?? text,
+    omitted: stripped !== undefined,
+  };
+}
+
 export async function loadExampleContext(
   dbPath: string,
   example: RecentExample,
@@ -180,6 +213,48 @@ export async function loadExampleContext(
       !hasColumns(db, "part", ["id", "message_id", "session_id", "time_created", "data"])
     ) {
       return unavailable("The OpenCode database schema cannot provide exact context.");
+    }
+
+    if (example.kind === "invoke") {
+      const invocation = readInvocationAnchor(db, example);
+      if (!invocation) return unavailable("The exact user invocation no longer matches this example.");
+      const all = readMessages(db, example.sessionId);
+      const anchorIndex = all.findIndex((message) => message.id === invocation.message.id);
+      if (anchorIndex < 0) return unavailable("The invocation's user message is unavailable.");
+      const warnings: string[] = [];
+      if (invocation.parentId) warnings.push("This excerpt is from a nested child session and includes only that session's context.");
+      if (invocation.omitted) warnings.push("Expanded skill instructions omitted; original task shown.");
+      const selected = [invocation.message];
+      for (let index = anchorIndex + 1; index < all.length && selected.length < 3; index += 1) {
+        const message = all[index];
+        if (!message || message.role === "user") break;
+        selected.push(message);
+      }
+      const messages: ContextMessage[] = [];
+      let remaining = MAX_TOTAL_CHARS;
+      for (const message of selected) {
+        const parts = message.id === invocation.message.id
+          ? [{ ...invocation.text, text: invocation.displayText }]
+          : readTextParts(db, example.sessionId, message.id).slice(0, MAX_TEXT_PARTS_PER_MESSAGE);
+        let messageRemaining = MAX_MESSAGE_CHARS;
+        for (const part of parts) {
+          if (remaining <= 0 || messageRemaining <= 0) break;
+          const allowed = Math.min(remaining, messageRemaining);
+          const text = part.text.slice(0, allowed);
+          messages.push({
+            id: message.id,
+            role: message.role,
+            at: toIso(part.created),
+            text,
+            relation: message.id === invocation.message.id ? "invocation" : "after",
+            truncated: text.length < part.text.length,
+          });
+          remaining -= text.length;
+          messageRemaining -= text.length;
+        }
+      }
+      if (messages.some((message) => message.truncated)) warnings.push("Excerpt text was truncated at 6,000 characters per message or 24,000 characters total.");
+      return { kind: "available", example, messages, action: example.action, warnings };
     }
 
     const anchor = readAnchor(db, example);

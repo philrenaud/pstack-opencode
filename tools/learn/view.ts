@@ -156,12 +156,12 @@ function wrap(text: string, width: number): string[] {
   return lines.length ? lines : [""];
 }
 
-function counts(observation?: CapabilityObservation): { loads: string; reads: string; status: string } {
+function counts(observation?: CapabilityObservation): { invokes: string; loads: string; reads: string; status: string } {
   if (observation?.evidence.kind === "observed") {
-    return { loads: String(observation.evidence.count.loads), reads: String(observation.evidence.count.reads), status: "observed" };
+    return { invokes: String(observation.evidence.count.invokes), loads: String(observation.evidence.count.loads), reads: String(observation.evidence.count.reads), status: "observed" };
   }
-  if (observation?.evidence.kind === "not-observed") return { loads: "0", reads: "0", status: "not observed" };
-  return { loads: "-", reads: "-", status: "unknown" };
+  if (observation?.evidence.kind === "not-observed") return { invokes: "0", loads: "0", reads: "0", status: "not observed" };
+  return { invokes: "-", loads: "-", reads: "-", status: "unknown" };
 }
 
 function typeBadge(kind: Capability["kind"]): string {
@@ -182,7 +182,7 @@ function detailLines(item: CapWithObservation, width: number): string[] {
   lines.push("");
   add("ABOUT", item.capability.summary);
   const evidence = counts(item.observation);
-  lines.push("", `EVIDENCE  ${evidence.status}  loads ${evidence.loads}  reads ${evidence.reads}`);
+  lines.push("", `EVIDENCE  ${evidence.status}  invokes ${evidence.invokes}  loads ${evidence.loads}  reads ${evidence.reads}`);
   if (item.observation?.evidence.kind === "observed") {
     lines.push(`LAST SEEN ${new Date(item.observation.evidence.lastSeenAt).toLocaleString()}`);
   }
@@ -202,19 +202,19 @@ function scopeLabel(snapshot: SnapshotResult, state: UiState): string {
 }
 
 function evidenceSummary(snapshot: SnapshotResult): string {
-  let observed = 0, notObserved = 0, unknown = 0, loads = 0, reads = 0;
+  let observed = 0, notObserved = 0, unknown = 0, invokes = 0, loads = 0, reads = 0;
   for (const observation of snapshot.observations) {
     if (observation.evidence.kind === "observed") {
-      observed += 1; loads += observation.evidence.count.loads; reads += observation.evidence.count.reads;
+      observed += 1; invokes += observation.evidence.count.invokes; loads += observation.evidence.count.loads; reads += observation.evidence.count.reads;
     } else if (observation.evidence.kind === "not-observed") notObserved += 1;
     else unknown += 1;
   }
-  return `${observed} observed (${loads} loads, ${reads} reads)  ${notObserved} not observed  ${unknown} unknown`;
+  return `${observed} observed (${invokes} invokes, ${loads} loads, ${reads} reads)  ${notObserved} not observed  ${unknown} unknown`;
 }
 
 function helpLines(snapshot: SnapshotResult): string[] {
   return [
-    "HELP", "", "Navigation", "  j/k or arrows  select       PgUp/PgDn/Home/End  move", "  Enter          examples     Esc                 back/close", "  left/right      focus pane   Ctrl-D/Ctrl-U       half page", "", "Explore", "  / search   Tab category   u show only not observed   n try next", "", "Evidence", "  loads = successful skill tool loads", "  reads = opened exact SKILL.md/playbook path", "  not observed = zero matching evidence in this scope and window", "  unknown = history unavailable; it is never treated as not observed", "", "Scope and actions", "  w window   s project/all   a include subagents   r refresh", "  c copy invocation (never runs it)   p print invocation and exit", "  q or Ctrl-C exit   ? or Esc close help", "", `Database: ${snapshot.options.dbPath ?? "not found"}`, "Metadata only proves a load or read, not that a workflow was completed.",
+    "HELP", "", "Navigation", "  j/k or arrows  select       PgUp/PgDn/Home/End  move", "  Enter          examples     Esc                 back/close", "  left/right      focus pane   Ctrl-D/Ctrl-U       half page", "", "Explore", "  / search   Tab category   u show only not observed   n try next", "", "Evidence", "  invokes = explicit slash requests or recognized expanded requests", "  loads = successful skill tool loads", "  reads = opened exact SKILL.md/playbook path", "  not observed = zero matching evidence in this scope and window", "  unknown = history unavailable; it is never treated as not observed", "", "Scope and actions", "  w window   s project/all   a include subagents   r refresh", "  c copy invocation (never runs it)   p print invocation and exit", "  q or Ctrl-C exit   ? or Esc close help", "", `Database: ${snapshot.options.dbPath ?? "not found"}`, "Evidence types are independent and do not sum to executions.",
   ];
 }
 
@@ -236,8 +236,8 @@ export function detailScrollLimit(snapshot: SnapshotResult, state: UiState, widt
   return Math.max(0, detailLines(selected, paneWidth).length - visible);
 }
 
-function exampleType(kind: "load" | "read"): string {
-  return kind === "load" ? "load" : "read";
+function exampleType(kind: import("./types").RecentExample["kind"]): string {
+  return kind;
 }
 
 function examplesLines(item: CapWithObservation, history: HistoryResult, width: number): string[] {
@@ -268,7 +268,7 @@ function examplesLines(item: CapWithObservation, history: HistoryResult, width: 
         lines.push("");
       }
     }
-    addWrapped("load = successful skill tool load; read = opened exact SKILL.md/playbook.");
+    addWrapped("invoke = explicit or expanded user request; load = successful skill tool load; read = exact file consultation.");
     addWrapped("Consultation only; not proof of completed execution.");
     return lines;
   }
@@ -313,7 +313,7 @@ export function renderFrame(snapshot: SnapshotResult, state: UiState, width: num
   ];
   if (history.kind === "unavailable") rows.push(fit(`HISTORY UNKNOWN: ${history.reason}`, lineWidth));
   else if (history.warnings.length || snapshot.catalog.warnings.length) rows.push(fit(`WARNING: ${[...history.warnings, ...snapshot.catalog.warnings][0]}`, lineWidth));
-  else rows.push(fit("Evidence: loads are successful skill tool loads; reads are exact file consultations.", lineWidth));
+  else rows.push(fit("Evidence: invokes are user requests; loads and reads are separate consultation evidence.", lineWidth));
 
   if (state.focus === "examples") {
     const detail = selected ? examplesLines(selected, snapshot.history, lineWidth) : ["No matching capabilities."];
@@ -324,18 +324,18 @@ export function renderFrame(snapshot: SnapshotResult, state: UiState, width: num
     const detail = selected ? detailLines(selected, lineWidth) : ["No matching capabilities."];
     for (let index = 0; index < dims.bodyHeight; index++) rows.push(fit(detail[state.detailOffset + index] ?? "", lineWidth));
   } else if (!dims.split) {
-    rows.push(fit("   TYPE NAME                                      LOADS READS", lineWidth));
+    rows.push(fit("   TYPE NAME                               INVOKE LOAD READ", lineWidth));
     const visible = filtered.slice(state.listOffset, state.listOffset + listVisibleRows(height));
     for (let index = 0; index < listVisibleRows(height); index++) {
       const item = visible[index];
       if (!item) { rows.push(fit("", lineWidth)); continue; }
       const absolute = state.listOffset + index;
       const evidence = counts(item.observation);
-      const nameWidth = Math.max(8, lineWidth - 22);
-      rows.push(fit(`${absolute === selectedIndex ? ">" : " "}  ${typeBadge(item.capability.kind)}  ${fit(item.capability.name, nameWidth)} ${evidence.loads.padStart(5)} ${evidence.reads.padStart(5)}`, lineWidth));
+      const nameWidth = Math.max(8, lineWidth - 26);
+      rows.push(fit(`${absolute === selectedIndex ? ">" : " "}  ${typeBadge(item.capability.kind)}  ${fit(item.capability.name, nameWidth)} ${evidence.invokes.padStart(6)} ${evidence.loads.padStart(4)} ${evidence.reads.padStart(4)}`, lineWidth));
     }
   } else {
-    rows.push(`${fit("   TYPE NAME                LOADS READS", dims.leftWidth)} ${fit("DETAIL", dims.rightWidth)}`);
+    rows.push(`${fit("   TYPE NAME                 INVOKE LOAD READ", dims.leftWidth)} ${fit("DETAIL", dims.rightWidth)}`);
     const visible = filtered.slice(state.listOffset, state.listOffset + listVisibleRows(height));
     const detail = selected ? detailLines(selected, dims.rightWidth) : ["No matching capabilities."];
     for (let index = 0; index < listVisibleRows(height); index++) {
@@ -344,7 +344,7 @@ export function renderFrame(snapshot: SnapshotResult, state: UiState, width: num
       if (item) {
         const absolute = state.listOffset + index;
         const evidence = counts(item.observation);
-        left = `${absolute === selectedIndex ? ">" : " "}  ${typeBadge(item.capability.kind)}  ${fit(item.capability.name, Math.max(8, dims.leftWidth - 20))} ${evidence.loads.padStart(5)} ${evidence.reads.padStart(5)}`;
+        left = `${absolute === selectedIndex ? ">" : " "}  ${typeBadge(item.capability.kind)}  ${fit(item.capability.name, Math.max(8, dims.leftWidth - 24))} ${evidence.invokes.padStart(6)} ${evidence.loads.padStart(4)} ${evidence.reads.padStart(4)}`;
       }
       rows.push(`${fit(left, dims.leftWidth)} ${fit(detail[state.detailOffset + index] ?? "", dims.rightWidth)}`);
     }

@@ -193,7 +193,8 @@ try:
                     transcript.extend(chunk)
                     terminal.consume(chunk)
             left = "\n".join("".join(row[:58]) for row in terminal.screen[4:-3])
-            assert target_name in left, f"Down selected {target_name} but left viewport did not reveal it: {left}"
+            selected_line = next((line for line in left.splitlines() if "›" in line), "")
+            assert target_name[:10] in selected_line, f"Down selected {target_name} but left viewport did not reveal it: {left}"
             terminal.key(b"\x1b[6~", "Catalog")
             deadline = time.monotonic() + 1
             while time.monotonic() < deadline:
@@ -203,7 +204,8 @@ try:
                     transcript.extend(chunk)
                     terminal.consume(chunk)
             left = "\n".join("".join(row[:58]) for row in terminal.screen[4:-3])
-            assert capabilities[42]["name"] in left, f"PageDown did not reveal selected row: {left}"
+            selected_line = next((line for line in left.splitlines() if "›" in line), "")
+            assert capabilities[42]["name"][:10] in selected_line, f"PageDown did not reveal selected row: {left}"
             terminal.key(b"\x1b[F", "why")
             left = "\n".join("".join(row[:58]) for row in terminal.screen[4:-3])
             assert "why" in left and "architect" not in left, f"End did not scroll catalog: {left}"

@@ -243,22 +243,21 @@ export async function createInteractiveApp(
     title: "Catalog 0/0",
     titleColor: theme.dim,
   });
-  const listHeader = new TextRenderable(renderer, {
-    id: "list-header",
-    content: "",
-    height: 1,
+  const listHeaderGutter = new BoxRenderable(renderer, {
+    id: "list-header-gutter",
     width: "100%",
+    height: 1,
+    paddingRight: 1,
+    overflow: "hidden",
   });
   const listScroll = new ScrollBoxRenderable(renderer, {
     id: "list-scroll",
     flexGrow: 1,
     backgroundColor: theme.panel,
-    paddingLeft: 1,
-    paddingRight: 1,
     scrollY: true,
     scrollX: false,
   });
-  leftPane.add(listHeader);
+  leftPane.add(listHeaderGutter);
   leftPane.add(listScroll);
   body.add(leftPane);
 
@@ -321,7 +320,53 @@ export async function createInteractiveApp(
     name: TextRenderable;
     loads: TextRenderable;
     reads: TextRenderable;
+    invokes: TextRenderable;
   }
+
+  function createCatalogRow(id: string): CatalogRow {
+    const box = new BoxRenderable(renderer, {
+      id,
+      width: "100%",
+      height: 1,
+      flexDirection: "row",
+      flexShrink: 0,
+      paddingLeft: 1,
+      paddingRight: 1,
+      overflow: "hidden",
+      backgroundColor: theme.panel,
+    });
+    const marker = new TextRenderable(renderer, { content: "", width: 2, height: 1, flexShrink: 0, truncate: true });
+    const type = new TextRenderable(renderer, { content: "", width: 4, height: 1, flexShrink: 0, truncate: true });
+    const name = new TextRenderable(renderer, {
+      content: "",
+      minWidth: 0,
+      flexBasis: 0,
+      flexGrow: 1,
+      height: 1,
+      wrapMode: "none",
+      truncate: true,
+      overflow: "hidden",
+      marginRight: 1,
+    });
+    const invokes = new TextRenderable(renderer, { content: "", width: 7, height: 1, flexShrink: 0, truncate: true });
+    const loads = new TextRenderable(renderer, { content: "", width: 5, height: 1, flexShrink: 0, truncate: true });
+    const reads = new TextRenderable(renderer, { content: "", width: 5, height: 1, flexShrink: 0, truncate: true });
+    box.add(marker);
+    box.add(type);
+    box.add(name);
+    box.add(invokes);
+    box.add(loads);
+    box.add(reads);
+    return { box, marker, type, name, invokes, loads, reads };
+  }
+
+  const listHeader = createCatalogRow("list-header");
+  listHeader.type.content = styled([[fg(theme.dim)("TYPE") as TextChunk]]);
+  listHeader.name.content = styled([[fg(theme.dim)(" CAPABILITY") as TextChunk]]);
+  listHeader.invokes.content = styled([[fg(theme.dim)("INVOKE") as TextChunk]]);
+  listHeader.loads.content = styled([[fg(theme.dim)("LOAD") as TextChunk]]);
+  listHeader.reads.content = styled([[fg(theme.dim)("READ") as TextChunk]]);
+  listHeaderGutter.add(listHeader.box);
 
   const rowBoxes: CatalogRow[] = [];
   let rowIds: string[] = [];
@@ -435,9 +480,11 @@ export async function createInteractiveApp(
     let unknown = 0;
     let loads = 0;
     let reads = 0;
+    let invokes = 0;
     for (const observation of snapshot.observations) {
       if (observation.evidence.kind === "observed") {
         observed += 1;
+        invokes += observation.evidence.count.invokes;
         loads += observation.evidence.count.loads;
         reads += observation.evidence.count.reads;
       } else if (observation.evidence.kind === "not-observed") notObserved += 1;
@@ -446,7 +493,7 @@ export async function createInteractiveApp(
     const historyLine =
       snapshot.history.kind === "unavailable"
         ? `HISTORY UNKNOWN: ${snapshot.history.reason}`
-        : `${observed} observed (${loads} loads, ${reads} reads)  ·  ${notObserved} not observed  ·  ${unknown} unknown`;
+        : `${observed} observed (${invokes} invokes, ${loads} loads, ${reads} reads)  ·  ${notObserved} not observed  ·  ${unknown} unknown`;
     evidenceText.content = styled([[fg(snapshot.history.kind === "unavailable" ? theme.warn : theme.dim)(inlineSafe(historyLine)) as TextChunk]]);
   }
 
@@ -458,24 +505,9 @@ export async function createInteractiveApp(
     if (identitiesChanged) {
       clearRows();
       for (const [index, item] of filtered.entries()) {
-        const box = new BoxRenderable(renderer, {
-          id: `catalog-row-${item.capability.id}`,
-          flexDirection: "row",
-          backgroundColor: theme.panel,
-          height: 1,
-        });
-        const marker = new TextRenderable(renderer, { content: "", width: 2, height: 1 });
-        const type = new TextRenderable(renderer, { content: "", width: 4, height: 1 });
-        const name = new TextRenderable(renderer, { content: "", flexGrow: 1, minWidth: 34, height: 1, wrapMode: "none" });
-        const loads = new TextRenderable(renderer, { content: "", width: 5, height: 1, wrapMode: "none" });
-        const reads = new TextRenderable(renderer, { content: "", width: 5, height: 1, wrapMode: "none" });
-        box.add(marker);
-        box.add(type);
-        box.add(name);
-        box.add(loads);
-        box.add(reads);
-        listScroll.add(box);
-        rowBoxes.push({ box, marker, type, name, loads, reads });
+        const row = createCatalogRow(`catalog-row-${item.capability.id}`);
+        listScroll.add(row.box);
+        rowBoxes.push(row);
       }
       rowIds = nextRowIds;
     }
@@ -484,6 +516,7 @@ export async function createInteractiveApp(
       if (!row) return;
       const isSelected = index === state.selected && state.focus !== "context";
       const evidence = item.observation;
+      const invokes = evidence?.evidence.kind === "observed" ? String(evidence.evidence.count.invokes) : evidence?.evidence.kind === "not-observed" ? "0" : "—";
       const loads = evidence?.evidence.kind === "observed" ? String(evidence.evidence.count.loads) : evidence?.evidence.kind === "not-observed" ? "0" : "—";
       const reads = evidence?.evidence.kind === "observed" ? String(evidence.evidence.count.reads) : evidence?.evidence.kind === "not-observed" ? "0" : "—";
       const nameColor = isSelected ? theme.accent : theme.text;
@@ -492,13 +525,13 @@ export async function createInteractiveApp(
       row.marker.content = styled([[fg(isSelected ? theme.accent : theme.dim)(isSelected ? "› " : "  ") as TextChunk]]);
       row.type.content = styled([[fg(theme.dim)(typeBadge(item.capability.kind)) as TextChunk]]);
       row.name.content = styled([[fg(nameColor)(inlineSafe(item.capability.name)) as TextChunk]]);
+      row.invokes.content = styled([[fg(evidenceColor)(invokes) as TextChunk]]);
       row.loads.content = styled([[fg(evidenceColor)(loads) as TextChunk]]);
       row.reads.content = styled([[fg(evidenceColor)(reads) as TextChunk]]);
     });
     const nextSelectedRowId = rowBoxes[state.selected]?.box.id;
     if (identitiesChanged || nextSelectedRowId !== selectedRowId) revealSelectedRowAfterLayout();
     selectedRowId = nextSelectedRowId;
-    listHeader.content = styled([[fg(theme.dim)(" TYPE CAPABILITY                         LOAD READ") as TextChunk]]);
     leftPane.title = `Catalog ${filtered.length}/${snapshot.catalog.capabilities.length}`;
     leftPane.borderColor = state.focus === "list" ? theme.borderFocus : theme.border;
   }
@@ -519,7 +552,7 @@ export async function createInteractiveApp(
     if (evidence?.evidence.kind === "observed") {
       rows.push([
         fg(theme.dim)("EVIDENCE ") as TextChunk,
-        plain(`observed  loads ${evidence.evidence.count.loads}  reads ${evidence.evidence.count.reads}`),
+        plain(`observed  invokes ${evidence.evidence.count.invokes}  loads ${evidence.evidence.count.loads}  reads ${evidence.evidence.count.reads}`),
       ]);
       rows.push([fg(theme.dim)("LAST SEEN ") as TextChunk, plain(new Date(evidence.evidence.lastSeenAt).toLocaleString())]);
     } else if (evidence?.evidence.kind === "not-observed") {
@@ -562,7 +595,7 @@ export async function createInteractiveApp(
       rows.push([
         marker as TextChunk,
         bold(fg(isSelected ? theme.accent : theme.text)(new Date(example.at).toLocaleString())) as TextChunk,
-        plain(`  ${example.kind === "load" ? "load" : "read"}`),
+        plain(`  ${example.kind}`),
         example.partId && example.messageId ? plain("") : (fg(theme.dim)("  (no exact id)") as TextChunk),
       ]);
       rows.push([plain("    "), fg(theme.dim)(example.sessionTitle) as TextChunk]);
@@ -571,7 +604,7 @@ export async function createInteractiveApp(
       rows.push([plain("    session "), plain(example.sessionId)]);
       rows.push([]);
     });
-    rows.push([fg(theme.dim)("load = successful skill tool load; read = opened exact SKILL.md/playbook.") as TextChunk]);
+    rows.push([fg(theme.dim)("invoke = explicit or expanded request; load/read are separate consultation evidence.") as TextChunk]);
     rows.push([fg(theme.dim)("Consultation only; not proof of completed execution.") as TextChunk]);
     rows.push([]);
     rows.push([fg(theme.accent)("Enter: exact conversation context for the selected example.") as TextChunk]);
@@ -601,12 +634,13 @@ export async function createInteractiveApp(
     rows.push([]);
     let eventRendered = false;
     for (const message of data.messages) {
-      if (!eventRendered && message.relation === "after") {
-        rows.push([bg(theme.accentBg)(fg(theme.accent)(safe(` TOOL EVENT ${data.action} `))) as TextChunk]);
+      if (!eventRendered && (message.relation === "after" || data.example.kind === "invoke")) {
+        const marker = data.example.kind === "invoke" ? "INVOCATION" : "TOOL EVENT";
+        rows.push([bg(theme.accentBg)(fg(theme.accent)(safe(` ${marker} ${data.action} `))) as TextChunk]);
         rows.push([]);
         eventRendered = true;
       }
-      const label = message.relation === "invocation" ? "LEAD-IN" : relationLabel(message.relation);
+      const label = message.relation === "invocation" && data.example.kind !== "invoke" ? "LEAD-IN" : relationLabel(message.relation);
       const roleColor = message.role === "user" ? theme.accent : theme.text;
       rows.push([
         fg(theme.dim)(`${label} `) as TextChunk,
@@ -619,7 +653,8 @@ export async function createInteractiveApp(
       rows.push([]);
     }
     if (!eventRendered) {
-      rows.push([bg(theme.accentBg)(fg(theme.accent)(safe(` TOOL EVENT ${data.action} `))) as TextChunk]);
+      const marker = data.example.kind === "invoke" ? "INVOCATION" : "TOOL EVENT";
+      rows.push([bg(theme.accentBg)(fg(theme.accent)(safe(` ${marker} ${data.action} `))) as TextChunk]);
       rows.push([]);
     }
     if (data.warnings.length) {
@@ -733,6 +768,7 @@ export async function createInteractiveApp(
       [plain("Explore")],
       [plain("  / search   Tab category   u not observed   n try next")], [],
       [plain("Evidence")],
+      [plain("  invokes = explicit slash requests or recognized expanded requests")],
       [plain("  loads = successful skill tool loads")],
       [plain("  reads = opened exact SKILL.md/playbook path")], [],
       [plain("Scope and actions")],

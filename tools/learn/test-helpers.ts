@@ -94,10 +94,25 @@ create table part (
   time_updated integer not null,
   data text not null
 );
+create table message (
+  id text primary key,
+  session_id text not null,
+  time_created integer not null,
+  data text not null
+);
 create index session_project_time on session(project_id, time_updated);
 create index part_session_idx on part(session_id);
 `);
   return db;
+}
+
+export function insertMessage(
+  db: Database,
+  row: { id: string; sessionId: string; created: number; role: "user" | "assistant" },
+): void {
+  db.query("insert into message values (?, ?, ?, ?)").run(
+    row.id, row.sessionId, row.created, JSON.stringify({ role: row.role }),
+  );
 }
 
 export function sha256File(path: string): string {

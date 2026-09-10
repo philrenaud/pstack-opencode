@@ -2,7 +2,7 @@
 
 ![OpenTUI learner with catalog and invocation details](images/learn-opentui.png)
 
-Captured from the OpenTUI renderer with demo history. To regenerate on macOS, run `bun tools/learn/capture.ts .audit/learn-capture.json`, then `swift scripts/render-learn-capture.swift .audit/learn-capture.json docs/images/learn-opentui.png`.
+Captured from the OpenTUI renderer with demo history.
 
 Run this from the pstack-opencode clone:
 
@@ -28,14 +28,15 @@ Examples respect the current project, time-window, and child-session filters. On
 
 ## Understand the evidence
 
-The dashboard reads local OpenCode tool metadata through a read-only SQLite connection. Exact context additionally reads original message text when you open it. It makes no model calls and uploads nothing. Background refresh, snapshots, and JSON reports do not fetch message bodies.
+The dashboard uses a read-only SQLite connection. It reads tool metadata and bounded identifying portions of user messages to recognize explicit skill invocations. Exact context reads the original message text only when you open it. It makes no model calls and uploads nothing. Snapshots and JSON reports contain counts and event metadata, not conversation bodies.
 
+- **Invokes** count user messages starting with a known slash command, or expanded skill instructions with a matching heading and installed skill-directory footer. Ordinary mentions and quoted examples do not count. This recognizes OpenCode's recorded message format; it is not a separate command-execution receipt.
 - **Loads** count successful `skill` tool calls for this catalog.
 - **Reads** count successful reads of an exact skill or playbook file.
 - **Not observed** means no matching evidence in the selected scope and time window.
 - **Unknown** means the database, schema, scope, or relevant evidence could not be read reliably.
 
-A file read may be research or review. A skill load does not prove that the agent followed the skill, and a playbook read does not prove that the workflow completed. References in conversation text, failed tool calls, and reads of a separate upstream checkout do not count.
+A file read may be research or review. An invocation expresses the user's request. A skill load does not prove that the agent followed the skill, and a playbook read does not prove that the workflow completed. Invoking a skill and loading it are separate events and can both be counted. Failed tool calls and reads of a separate upstream checkout do not count.
 
 The initial view covers the current project, the last 30 days, and top-level sessions. Child sessions are excluded by default. Separate CLI review sessions can be top-level, so this is not a perfect filter for audit activity. If old tool records lack the resolved skill directory, matching falls back to the skill name and displays a warning.
 
