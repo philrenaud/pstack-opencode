@@ -31,6 +31,7 @@ interface PartEvent {
   ts: number;
   kind: "skill-load" | "file-read";
   partId?: string;
+  messageId?: string;
   skillName?: string;
   skillDir?: string;
   filePath?: string;
@@ -288,6 +289,7 @@ export class HistoryStore {
   private stats: RefreshStats | undefined;
   private sessionTitleColumn = false;
   private partIdColumn = false;
+  private partMessageIdColumn = false;
 
   constructor(dbPath?: string) {
     this.dbInfo = discoverDbPath(dbPath);
@@ -327,6 +329,7 @@ export class HistoryStore {
     this.lastDataVersion = Number.NaN;
     this.sessionTitleColumn = false;
     this.partIdColumn = false;
+    this.partMessageIdColumn = false;
   }
 
   /**
@@ -597,9 +600,12 @@ export class HistoryStore {
 
   private loadSessionEvents(db: Database, session: SessionRow): SessionEvents {
     const idField = this.partIdColumn ? "id as part_id," : "'' as part_id,";
+    const messageIdField = this.partMessageIdColumn
+      ? "message_id as message_id,"
+      : "'' as message_id,";
     const rows = db
       .query<Record<string, unknown>, [string]>(
-        `select ${idField} time_created, json_extract(data, '$.tool') as tool, json_extract(data, '$.state.status') as status, json_extract(data, '$.state.input.name') as skill_name, json_extract(data, '$.state.metadata.dir') as skill_dir, json_extract(data, '$.state.input.filePath') as file_path, json_extract(data, '$.state.time.start') as t_start, json_extract(data, '$.state.time.end') as t_end from part where session_id = ? and json_valid(data) and json_extract(data, '$.tool') in ('skill','read')`,
+        `select ${idField} ${messageIdField} time_created, json_extract(data, '$.tool') as tool, json_extract(data, '$.state.status') as status, json_extract(data, '$.state.input.name') as skill_name, json_extract(data, '$.state.metadata.dir') as skill_dir, json_extract(data, '$.state.input.filePath') as file_path, json_extract(data, '$.state.time.start') as t_start, json_extract(data, '$.state.time.end') as t_end from part where session_id = ? and json_valid(data) and json_extract(data, '$.tool') in ('skill','read')`,
       )
       .all(session.id);
 
@@ -635,6 +641,10 @@ export class HistoryStore {
         if (isString(partId)) {
           event.partId = partId;
         }
+        const messageId = row["message_id"];
+        if (isString(messageId)) {
+          event.messageId = messageId;
+        }
         const dir = row["skill_dir"];
         if (isString(dir)) {
           event.skillDir = dir;
@@ -655,6 +665,10 @@ export class HistoryStore {
         const partId = row["part_id"];
         if (isString(partId)) {
           event.partId = partId;
+        }
+        const messageId = row["message_id"];
+        if (isString(messageId)) {
+          event.messageId = messageId;
         }
         events.push(event);
       }
@@ -746,6 +760,7 @@ export class HistoryStore {
         }
         this.sessionTitleColumn = sessionColumns.includes("title");
         this.partIdColumn = partColumns.includes("id");
+        this.partMessageIdColumn = partColumns.includes("message_id");
         this.lastDataVersion = dataVersion;
       }
 
@@ -832,18 +847,25 @@ export class HistoryStore {
               return;
             }
             const tie = event.partId ? `part:${event.partId}` : `session:${session.id}:${event.kind}`;
+            const example: RecentExample = {
+              kind,
+              at: toIso(event.ts),
+              sessionId: session.id,
+              sessionTitle: session.title ?? session.id,
+              directory: session.directory,
+              isSubagent: Boolean(session.parentId),
+              action,
+            };
+            if (event.partId) {
+              example.partId = event.partId;
+            }
+            if (event.messageId) {
+              example.messageId = event.messageId;
+            }
             tally.examples.push({
               ts: event.ts,
               tie,
-              example: {
-                kind,
-                at: toIso(event.ts),
-                sessionId: session.id,
-                sessionTitle: session.title ?? session.id,
-                directory: session.directory,
-                isSubagent: Boolean(session.parentId),
-                action,
-              },
+              example,
             });
           };
 

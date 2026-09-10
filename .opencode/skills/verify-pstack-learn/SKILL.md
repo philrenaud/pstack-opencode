@@ -15,7 +15,7 @@ Run `./learn --help` and `./learn --snapshot`. The snapshot must display `pstack
 
 ## Drive
 
-Run `python3 scripts/verify-learn.py --evidence .audit/learn-terminal.txt`. The helper launches the real executable, searches with raw keyboard input, appends a skill load from a second SQLite writer, refreshes, opens recent examples with session context, opens help, resizes, opens narrow details, prints an invocation, and tests Ctrl-C while searching.
+Run `python3 scripts/verify-learn.py --evidence .audit/learn-terminal.txt`. The helper launches the real OpenTUI executable, searches with raw keyboard input, appends a skill load from a second SQLite writer, refreshes, opens recent examples and exact original context, rejects synthetic tool-echo text, opens help, resizes, opens narrow details, prints an invocation, and tests Ctrl-C while searching. Its terminal screen decoder handles OpenTUI's incremental ANSI updates.
 
 Run `bun run --cwd tools/learn test` and `bun run --cwd tools/learn typecheck` for evidence classification and catalog changes. Read [features/README.md](features/README.md) for coverage.
 

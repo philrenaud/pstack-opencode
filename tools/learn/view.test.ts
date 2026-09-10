@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { createInitialState, examplesScrollLimit, filterCapabilities, renderFrame, styleFrame, suggestion } from "./view";
+import { createInitialState, examplesScrollLimit, filterCapabilities, renderFrame, suggestion } from "./view";
 import type { SnapshotResult } from "./types";
 import { stringWidth } from "bun";
 
@@ -262,27 +262,6 @@ test("examples scroll limit uses only examples content", () => {
     ],
   };
   expect(examplesScrollLimit(tallSnapshot, state, 120, 14)).toBeGreaterThan(limits);
-});
-
-test("split selected row color resets before right pane and preserves unicode text", () => {
-  const state = createInitialState();
-  const plain = renderFrame(snapshot, state, 120, 30);
-  const row = plain.find((line) => line.startsWith(">"));
-  if (!row) throw new Error("expected selected row");
-  const styled = styleFrame(plain, 120, true);
-  const styledRow = styled.find((line) => line.includes("\u001b[7;36m"));
-  if (!styledRow) throw new Error("expected styled selected row");
-  const clean = styledRow.replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, "");
-  expect(clean).toBe(row);
-  expect(styledRow).toContain("\u001b[0m ");
-
-  const unicodeFrame = ["title", ">  SK  東京サービス名     1     0 DETAIL ✅"];
-  const unicodeStyled = styleFrame(unicodeFrame, 120, true)[1];
-  const expectedUnicodeLine = unicodeFrame[1]!;
-  if (!unicodeStyled) throw new Error("expected unicode styled row");
-  expect(unicodeStyled.replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, "")).toBe(expectedUnicodeLine);
-
-  expect(styleFrame(plain, 120, false)).toEqual(plain);
 });
 
 test("examples wrap long values across visible lines without clipping", () => {

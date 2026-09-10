@@ -57,7 +57,28 @@ export interface RecentExample {
   directory: string;
   isSubagent: boolean;
   action: string;
+  partId?: string;
+  messageId?: string;
 }
+
+export interface ContextMessage {
+  id: string;
+  role: "user" | "assistant";
+  at: string;
+  text: string;
+  relation: "request" | "before" | "invocation" | "after";
+  truncated: boolean;
+}
+
+export type ExampleContext =
+  | {
+      kind: "available";
+      example: RecentExample;
+      messages: ContextMessage[];
+      action: string;
+      warnings: string[];
+    }
+  | { kind: "unavailable"; reason: string };
 
 export interface NotObservedEvidence {
   kind: "not-observed";

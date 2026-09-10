@@ -1,11 +1,10 @@
-import { spawnSync } from "node:child_process";
 import { basename } from "node:path";
 import { stringWidth } from "bun";
 import type { Capability, CapabilityObservation, HistoryResult, SnapshotResult, WindowKind } from "./types";
 import { stripControlAndAnsi } from "./types";
 
 export type CategoryTab = "all" | "skills" | "playbooks" | "principles";
-export type FocusPane = "list" | "detail" | "examples";
+export type FocusPane = "list" | "detail" | "examples" | "context";
 
 export interface UiState {
   selected: number;
@@ -24,6 +23,7 @@ export interface UiState {
   window: WindowKind;
   status?: string;
   examplesOffset: number;
+  exampleIndex: number;
 }
 
 export interface CapWithObservation {
@@ -45,8 +45,15 @@ export function createInitialState(): UiState {
     selected: 0, listOffset: 0, detailOffset: 0, category: "all", hideObserved: false,
     search: "", searching: false, focus: "list", examplesReturnFocus: "list", narrowDetail: false, help: false,
     allProjects: false, includeSubagents: false, window: "30",
-    examplesOffset: 0,
+    examplesOffset: 0, exampleIndex: 0,
   };
+}
+
+export function recentExamplesFor(item: CapWithObservation | undefined): import("./types").RecentExample[] {
+  if (item?.observation?.evidence.kind === "observed") {
+    return item.observation.evidence.recentExamples ?? [];
+  }
+  return [];
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -147,38 +154,6 @@ function wrap(text: string, width: number): string[] {
     remaining = remaining.slice(take.length).trimStart();
   }
   return lines.length ? lines : [""];
-}
-
-function splitAtDisplayWidth(text: string, width: number): [string, string] {
-  if (width <= 0) return ["", text];
-  const characters = [...text];
-  let display = 0;
-  let index = 0;
-  while (index < characters.length) {
-    const character = characters[index] ?? "";
-    const nextWidth = stringWidth(character);
-    if (display + nextWidth > width) break;
-    display += nextWidth;
-    index += 1;
-    if (display === width) {
-      while (index < characters.length && stringWidth(characters[index] ?? "") === 0) index += 1;
-      break;
-    }
-  }
-  return [characters.slice(0, index).join(""), characters.slice(index).join("")];
-}
-
-export function styleFrame(frame: string[], width: number, enabled: boolean): string[] {
-  if (!enabled) return frame;
-  const dims = paneDimensions(width, frame.length);
-  return frame.map((line, index) => {
-    if (index === 0) return `\u001b[1;36m${line}\u001b[0m`;
-    if (line.startsWith("HISTORY UNKNOWN") || line.startsWith("WARNING")) return `\u001b[33m${line}\u001b[0m`;
-    if (!/^>\s\s(?:SK|PB|PR)\s\s/.test(line)) return line;
-    if (!dims.split) return `\u001b[7;36m${line}\u001b[0m`;
-    const [left, right] = splitAtDisplayWidth(line, dims.leftWidth);
-    return `\u001b[7;36m${left}\u001b[0m${right}`;
-  });
 }
 
 function counts(observation?: CapabilityObservation): { loads: string; reads: string; status: string } {
@@ -381,17 +356,6 @@ export function renderFrame(snapshot: SnapshotResult, state: UiState, width: num
   rows.push(fit(`${search}  |  q quit  Tab category  n next  u not observed  w window  s scope  a subagents  r refresh`, lineWidth));
   rows.push(fit(`Refreshed ${refreshed}${state.status ? `  |  ${state.status}` : ""}`, lineWidth));
   return rows.slice(0, height);
-}
-
-export function applyCopy(text: string): string {
-  text = stripControlAndAnsi(text).replace(/[\r\n\t]/g, " ");
-  if (process.platform === "darwin") {
-    const pb = spawnSync("pbcopy", { input: text, encoding: "utf8", timeout: 1_000 });
-    if (pb.status === 0) return "copy requested: pbcopy";
-  }
-  const encoded = Buffer.from(text, "utf8").toString("base64");
-  process.stdout.write(`\u001b]52;c;${encoded}\u0007`);
-  return "copy requested: OSC 52";
 }
 
 export function historyWarnings(history: HistoryResult): string[] {
