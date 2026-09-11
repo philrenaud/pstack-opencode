@@ -179,6 +179,11 @@ try:
         assert len(snapshot["catalog"]["capabilities"]) >= 69
         assert snapshot["history"]["kind"] == "available"
         print("PASS complete JSON output through a pipe")
+        sorted_report = subprocess.run([*command, "--json", "--sort", "loads"], cwd=root, capture_output=True, check=True, timeout=20)
+        ordered = json.loads(sorted_report.stdout)
+        assert ordered["catalog"]["capabilities"][0]["id"] == "skill:architect"
+        assert ordered["options"]["sortDirection"] == "desc"
+        print("PASS usage-sorted JSON orders observed capabilities first")
         terminal = Terminal(command, 120, 24)
         try:
             terminal.wait("Catalog")
@@ -218,6 +223,11 @@ try:
         terminal = Terminal(command)
         try:
             terminal.wait("pstack learn")
+            terminal.key(b"3", "LOAD↓")
+            terminal.key(b"v", "LOAD↑")
+            terminal.key(b"l", "LAST USED↓")
+            terminal.wait("━")
+            terminal.key(b"1", "CAPABILITY↑")
             terminal.key(b"/architect\r", "INVOKE")
             terminal.wait("loads 1")
             add_load(2)

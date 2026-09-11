@@ -19,7 +19,7 @@ const snapshot: SnapshotResult = {
       {
         id: "playbook:feature",
         kind: "playbook",
-        name: "Feature",
+        name: "Z Feature",
         summary: "Implement a feature.",
         sourcePath: "/x/skills/poteto-mode/playbooks/feature.md",
         invocation: "Use the feature playbook to build behavior.",
@@ -122,6 +122,33 @@ test("filters by search and hide observed", () => {
   items = filterCapabilities(snapshot, state);
   expect(items).toHaveLength(1);
   expect(items[0]?.capability.id).toBe("playbook:feature");
+});
+
+test("sorts metrics and last used with stable unknown-last ordering", () => {
+  const data = structuredClone(snapshot);
+  const observed = data.observations[0];
+  if (!observed || observed.evidence.kind !== "observed") throw new Error("fixture is incomplete");
+  observed.evidence.count = { invokes: 2, loads: 3, reads: 5 };
+  observed.evidence.lastSeenAt = "2024-02-03T00:00:00.000Z";
+  const state = createInitialState();
+  state.sortKey = "usage";
+  state.sortDirection = "desc";
+  expect(filterCapabilities(data, state).map((item) => item.capability.id)).toEqual(["skill:how", "playbook:feature"]);
+  state.sortDirection = "asc";
+  expect(filterCapabilities(data, state).map((item) => item.capability.id)).toEqual(["playbook:feature", "skill:how"]);
+  state.sortKey = "last-used";
+  expect(filterCapabilities(data, state).map((item) => item.capability.id)).toEqual(["skill:how", "playbook:feature"]);
+  state.sortDirection = "desc";
+  expect(filterCapabilities(data, state).map((item) => item.capability.id)).toEqual(["skill:how", "playbook:feature"]);
+});
+
+test("scales observation bars and distinguishes unknown", async () => {
+  const { observationBarWidth } = await import("./view");
+  expect(observationBarWidth(0, 10, 20)).toBe(0);
+  expect(observationBarWidth(1, 10, 20)).toBe(2);
+  expect(observationBarWidth(5, 10, 20)).toBe(10);
+  expect(observationBarWidth(10, 10, 20)).toBe(20);
+  expect(observationBarWidth(undefined, 10, 20)).toBeUndefined();
 });
 
 test("renders compact hint for tiny terminal", () => {

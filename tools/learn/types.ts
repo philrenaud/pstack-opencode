@@ -21,6 +21,8 @@ export interface CatalogResult {
 }
 
 export type WindowKind = "7" | "30" | "all";
+export type SortKey = "name" | "invokes" | "loads" | "reads" | "usage" | "last-used";
+export type SortDirection = "asc" | "desc";
 
 export interface LearnOptions {
   cwd: string;
@@ -33,6 +35,8 @@ export interface LearnOptions {
   json: boolean;
   snapshot: boolean;
   help: boolean;
+  sortKey?: SortKey;
+  sortDirection?: SortDirection;
 }
 
 export interface Count {
@@ -133,6 +137,8 @@ export interface SnapshotResult {
     includeSubagents: boolean;
     projectPath?: string | undefined;
     dbPath?: string | undefined;
+    sortKey?: SortKey;
+    sortDirection?: SortDirection;
   };
 }
 

@@ -1,6 +1,6 @@
 import { basename } from "node:path";
 import { stringWidth } from "bun";
-import type { Capability, CapabilityObservation, HistoryResult, SnapshotResult, WindowKind } from "./types";
+import type { Capability, CapabilityObservation, HistoryResult, SnapshotResult, SortDirection, SortKey, WindowKind } from "./types";
 import { stripControlAndAnsi } from "./types";
 
 export type CategoryTab = "all" | "skills" | "playbooks" | "principles";
@@ -24,6 +24,8 @@ export interface UiState {
   status?: string;
   examplesOffset: number;
   exampleIndex: number;
+  sortKey: SortKey;
+  sortDirection: SortDirection;
 }
 
 export interface CapWithObservation {
@@ -45,7 +47,7 @@ export function createInitialState(): UiState {
     selected: 0, listOffset: 0, detailOffset: 0, category: "all", hideObserved: false,
     search: "", searching: false, focus: "list", examplesReturnFocus: "list", narrowDetail: false, help: false,
     allProjects: false, includeSubagents: false, window: "30",
-    examplesOffset: 0, exampleIndex: 0,
+    examplesOffset: 0, exampleIndex: 0, sortKey: "name", sortDirection: "asc",
   };
 }
 
@@ -65,7 +67,7 @@ export function isSplitLayout(width: number): boolean {
 }
 
 export function listVisibleRows(height: number): number {
-  return Math.max(1, height - 9);
+  return Math.max(1, Math.floor((height - 9) / 2));
 }
 
 function paneDimensions(width: number, height: number): {
@@ -103,11 +105,62 @@ function searchable(capability: Capability): string {
 export function filterCapabilities(snapshot: SnapshotResult, state: UiState): CapWithObservation[] {
   const byId = new Map(snapshot.observations.map((observation) => [observation.capabilityId, observation]));
   const query = state.search.trim().toLowerCase();
-  return snapshot.catalog.capabilities
+  const filtered = snapshot.catalog.capabilities
     .map((capability) => ({ capability, observation: byId.get(capability.id) }))
     .filter(({ capability, observation }) => kindMatches(state.category, capability.kind) &&
       (!state.hideObserved || observation?.evidence.kind === "not-observed") &&
       (!query || searchable(capability).includes(query)));
+  return sortCapabilities(filtered, state.sortKey, state.sortDirection);
+}
+
+export function totalObservations(item: CapWithObservation): number | undefined {
+  if (item.observation?.evidence.kind === "unknown" || !item.observation) return undefined;
+  const { invokes, loads, reads } = item.observation.evidence.count;
+  return invokes + loads + reads;
+}
+
+function numericSortValue(item: CapWithObservation, key: Exclude<SortKey, "name" | "last-used">): number | undefined {
+  if (item.observation?.evidence.kind === "unknown" || !item.observation) return undefined;
+  if (key === "usage") return totalObservations(item);
+  return item.observation.evidence.count[key];
+}
+
+function lastUsedValue(item: CapWithObservation): number | undefined {
+  if (item.observation?.evidence.kind !== "observed") return undefined;
+  const value = Date.parse(item.observation.evidence.lastSeenAt);
+  return Number.isNaN(value) ? undefined : value;
+}
+
+function tieBreak(a: CapWithObservation, b: CapWithObservation): number {
+  return a.capability.name.localeCompare(b.capability.name) || a.capability.id.localeCompare(b.capability.id);
+}
+
+export function sortCapabilities(items: readonly CapWithObservation[], key: SortKey, direction: SortDirection): CapWithObservation[] {
+  const multiplier = direction === "asc" ? 1 : -1;
+  return [...items].sort((a, b) => {
+    if (key === "name") return multiplier * tieBreak(a, b);
+    const aValue = key === "last-used" ? lastUsedValue(a) : numericSortValue(a, key);
+    const bValue = key === "last-used" ? lastUsedValue(b) : numericSortValue(b, key);
+    if (aValue === undefined || bValue === undefined) {
+      if (aValue === undefined && bValue === undefined) return tieBreak(a, b);
+      return aValue === undefined ? 1 : -1;
+    }
+    return aValue === bValue ? tieBreak(a, b) : multiplier * (aValue - bValue);
+  });
+}
+
+export function observationBarWidth(total: number | undefined, maximum: number, width: number): number | undefined {
+  if (total === undefined) return undefined;
+  if (total <= 0 || maximum <= 0 || width <= 0) return 0;
+  return Math.max(1, Math.min(width, Math.round((total / maximum) * width)));
+}
+
+export function sortLabel(key: SortKey): string {
+  return key === "last-used" ? "Last used" : key === "usage" ? "Usage" : key[0]!.toUpperCase() + key.slice(1);
+}
+
+function columnLabel(label: string, key: SortKey, state: UiState): string {
+  return `${label}${state.sortKey === key ? state.sortDirection === "asc" ? "↑" : "↓" : ""}`;
 }
 
 export function suggestion(snapshot: SnapshotResult): Capability | undefined {
@@ -184,7 +237,7 @@ function detailLines(item: CapWithObservation, width: number): string[] {
   const evidence = counts(item.observation);
   lines.push("", `EVIDENCE  ${evidence.status}  invokes ${evidence.invokes}  loads ${evidence.loads}  reads ${evidence.reads}`);
   if (item.observation?.evidence.kind === "observed") {
-    lines.push(`LAST SEEN ${new Date(item.observation.evidence.lastSeenAt).toLocaleString()}`);
+    lines.push(`LAST USED ${new Date(item.observation.evidence.lastSeenAt).toLocaleString()}`);
   }
   lines.push("");
   add("SOURCE", item.capability.sourcePath);
@@ -214,7 +267,7 @@ function evidenceSummary(snapshot: SnapshotResult): string {
 
 function helpLines(snapshot: SnapshotResult): string[] {
   return [
-    "HELP", "", "Navigation", "  j/k or arrows  select       PgUp/PgDn/Home/End  move", "  Enter          examples     Esc                 back/close", "  left/right      focus pane   Ctrl-D/Ctrl-U       half page", "", "Explore", "  / search   Tab category   u show only not observed   n try next", "", "Evidence", "  invokes = explicit slash requests or recognized expanded requests", "  loads = successful skill tool loads", "  reads = opened exact SKILL.md/playbook path", "  not observed = zero matching evidence in this scope and window", "  unknown = history unavailable; it is never treated as not observed", "", "Scope and actions", "  w window   s project/all   a include subagents   r refresh", "  c copy invocation (never runs it)   p print invocation and exit", "  q or Ctrl-C exit   ? or Esc close help", "", `Database: ${snapshot.options.dbPath ?? "not found"}`, "Evidence types are independent and do not sum to executions.",
+    "HELP", "", "Navigation", "  j/k or arrows  select       PgUp/PgDn/Home/End  move", "  Enter          examples     Esc                 back/close", "  left/right      focus pane   Ctrl-D/Ctrl-U       half page", "", "Explore", "  / search   Tab category   u show only not observed   n try next", "", "Sort", "  o cycle columns   v reverse   l last used newest", "  1 name  2 invokes  3 loads  4 reads  5 usage  6 last used", "  Bars: total observations · relative to filtered maximum", "", "Evidence", "  invokes = explicit slash requests or recognized expanded requests", "  loads = successful skill tool loads", "  reads = opened exact SKILL.md/playbook path", "  not observed = zero matching evidence in this scope and window", "  unknown = history unavailable; it is never treated as not observed", "", "Scope and actions", "  w window   s project/all   a include subagents   r refresh", "  c copy invocation (never runs it)   p print invocation and exit", "  q or Ctrl-C exit   ? or Esc close help", "", `Database: ${snapshot.options.dbPath ?? "not found"}`, "Evidence types are independent and do not sum to executions.",
   ];
 }
 
@@ -223,6 +276,8 @@ export function renderSnapshotText(snapshot: SnapshotResult, width: number, heig
   state.allProjects = snapshot.options.scope === "all-projects";
   state.includeSubagents = snapshot.options.includeSubagents;
   state.window = snapshot.options.window;
+  state.sortKey = snapshot.options.sortKey ?? "name";
+  state.sortDirection = snapshot.options.sortDirection ?? "asc";
   return renderFrame(snapshot, state, width, height);
 }
 
@@ -324,20 +379,26 @@ export function renderFrame(snapshot: SnapshotResult, state: UiState, width: num
     const detail = selected ? detailLines(selected, lineWidth) : ["No matching capabilities."];
     for (let index = 0; index < dims.bodyHeight; index++) rows.push(fit(detail[state.detailOffset + index] ?? "", lineWidth));
   } else if (!dims.split) {
-    rows.push(fit("   TYPE NAME                               INVOKE LOAD READ", lineWidth));
+    const primary = state.sortKey === "usage" ? columnLabel("USAGE", "usage", state) : state.sortKey === "last-used" ? columnLabel("LAST USED", "last-used", state) : columnLabel("NAME", "name", state);
+    rows.push(fit(`   TYPE ${primary.padEnd(34)} ${columnLabel("INVOKE", "invokes", state).padEnd(7)} ${columnLabel("LOAD", "loads", state).padEnd(5)} ${columnLabel("READ", "reads", state)}`, lineWidth));
     const visible = filtered.slice(state.listOffset, state.listOffset + listVisibleRows(height));
+    const maximum = Math.max(0, ...filtered.map((item) => totalObservations(item) ?? 0));
     for (let index = 0; index < listVisibleRows(height); index++) {
       const item = visible[index];
-      if (!item) { rows.push(fit("", lineWidth)); continue; }
+      if (!item) { rows.push(fit("", lineWidth), fit("", lineWidth)); continue; }
       const absolute = state.listOffset + index;
       const evidence = counts(item.observation);
       const nameWidth = Math.max(8, lineWidth - 26);
       rows.push(fit(`${absolute === selectedIndex ? ">" : " "}  ${typeBadge(item.capability.kind)}  ${fit(item.capability.name, nameWidth)} ${evidence.invokes.padStart(6)} ${evidence.loads.padStart(4)} ${evidence.reads.padStart(4)}`, lineWidth));
+      const barWidth = observationBarWidth(totalObservations(item), maximum, nameWidth);
+      rows.push(fit(`      ${barWidth === undefined ? "? unknown" : "━".repeat(barWidth)}`, lineWidth));
     }
   } else {
-    rows.push(`${fit("   TYPE NAME                 INVOKE LOAD READ", dims.leftWidth)} ${fit("DETAIL", dims.rightWidth)}`);
+    const primary = state.sortKey === "usage" ? columnLabel("USAGE", "usage", state) : state.sortKey === "last-used" ? columnLabel("LAST USED", "last-used", state) : columnLabel("NAME", "name", state);
+    rows.push(`${fit(`   TYPE ${primary.padEnd(21)} ${columnLabel("INVOKE", "invokes", state)} ${columnLabel("LOAD", "loads", state)} ${columnLabel("READ", "reads", state)}`, dims.leftWidth)} ${fit("DETAIL", dims.rightWidth)}`);
     const visible = filtered.slice(state.listOffset, state.listOffset + listVisibleRows(height));
     const detail = selected ? detailLines(selected, dims.rightWidth) : ["No matching capabilities."];
+    const maximum = Math.max(0, ...filtered.map((item) => totalObservations(item) ?? 0));
     for (let index = 0; index < listVisibleRows(height); index++) {
       const item = visible[index];
       let left = "";
@@ -346,14 +407,17 @@ export function renderFrame(snapshot: SnapshotResult, state: UiState, width: num
         const evidence = counts(item.observation);
         left = `${absolute === selectedIndex ? ">" : " "}  ${typeBadge(item.capability.kind)}  ${fit(item.capability.name, Math.max(8, dims.leftWidth - 24))} ${evidence.invokes.padStart(6)} ${evidence.loads.padStart(4)} ${evidence.reads.padStart(4)}`;
       }
-      rows.push(`${fit(left, dims.leftWidth)} ${fit(detail[state.detailOffset + index] ?? "", dims.rightWidth)}`);
+      rows.push(`${fit(left, dims.leftWidth)} ${fit(detail[state.detailOffset + index * 2] ?? "", dims.rightWidth)}`);
+      const itemTotal = item ? totalObservations(item) : 0;
+      const barWidth = item ? observationBarWidth(itemTotal, maximum, Math.max(8, dims.leftWidth - 24)) : 0;
+      rows.push(`${fit(item ? `      ${barWidth === undefined ? "? unknown" : "━".repeat(barWidth)}` : "", dims.leftWidth)} ${fit(detail[state.detailOffset + index * 2 + 1] ?? "", dims.rightWidth)}`);
     }
   }
 
   const next = suggestion(snapshot);
   rows.push(fit(next ? `Try next: ${next.name}. ${next.whyTry}` : "Try next: no not-observed workflow or playbook in this window.", lineWidth));
   const search = state.searching ? `Search /${state.search}` : state.search ? `Search: ${state.search}` : "? help  / search";
-  rows.push(fit(`${search}  |  q quit  Tab category  n next  u not observed  w window  s scope  a subagents  r refresh`, lineWidth));
+  rows.push(fit(`${search}  |  Sort ${sortLabel(state.sortKey)} ${state.sortDirection === "asc" ? "↑" : "↓"}  o cycle v reverse l recent  1-6 columns`, lineWidth));
   rows.push(fit(`Refreshed ${refreshed}${state.status ? `  |  ${state.status}` : ""}`, lineWidth));
   return rows.slice(0, height);
 }
