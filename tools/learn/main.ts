@@ -7,9 +7,10 @@ import type {
   HistoryResult,
   LearnOptions,
   SnapshotResult,
+  SortKey,
   WindowKind,
 } from "./types";
-import { renderSnapshotText } from "./view";
+import { createInitialState, filterCapabilities, renderSnapshotText } from "./view";
 
 const HELP_TEXT = `learn
 
@@ -25,6 +26,9 @@ Options:
   --catalog ROOT         explicit catalog root
   --json                 print JSON snapshot
   --snapshot             print one terminal snapshot and exit
+  --sort KEY             name|invokes|loads|reads|usage|last-used
+  --ascending            sort ascending
+  --descending           sort descending
   --help                 show this help
 
 Keys:
@@ -32,7 +36,14 @@ Keys:
   u not-observed filter, n suggested item, w window, s project/all, a subagents, r refresh,
   Enter recent examples, Enter again exact context, p print invocation and exit, c copy invocation,
   left/right focus list/detail, PgUp/PgDn/Home/End or ctrl-d/u scroll content.
+  o cycle sort, v reverse, l last used newest, 1-6 select a sort column.
 `;
+
+const SORT_KEYS: readonly SortKey[] = ["name", "invokes", "loads", "reads", "usage", "last-used"];
+
+function isSortKey(value: string): value is SortKey {
+  return value === "name" || value === "invokes" || value === "loads" || value === "reads" || value === "usage" || value === "last-used";
+}
 
 function defaultOptions(): LearnOptions {
   return {
@@ -43,6 +54,7 @@ function defaultOptions(): LearnOptions {
     json: false,
     snapshot: false,
     help: false,
+    sortKey: "name",
   };
 }
 
@@ -68,6 +80,16 @@ function parseArgs(argv: string[]): LearnOptions {
     }
     if (arg === "--snapshot") {
       out.snapshot = true;
+      continue;
+    }
+    if (arg === "--sort") {
+      const value = argv[++i];
+      if (!value || !isSortKey(value)) throw new Error(`--sort must be one of: ${SORT_KEYS.join(", ")}`);
+      out.sortKey = value;
+      continue;
+    }
+    if (arg === "--ascending" || arg === "--descending") {
+      out.sortDirection = arg === "--ascending" ? "asc" : "desc";
       continue;
     }
     if (arg === "--project") {
@@ -107,13 +129,21 @@ function parseArgs(argv: string[]): LearnOptions {
   return out;
 }
 
+function selectedSort(options: LearnOptions): { sortKey: SortKey; sortDirection: "asc" | "desc" } {
+  const sortKey = options.sortKey ?? "name";
+  return {
+    sortKey,
+    sortDirection: options.sortDirection ?? (sortKey === "name" ? "asc" : "desc"),
+  };
+}
+
 function observationsFromHistory(history: HistoryResult, capabilityIds: CapabilityId[]): CapabilityObservation[] {
   if (history.kind === "available") {
     return history.observations;
   }
   return capabilityIds.map((capabilityId) => ({
     capabilityId,
-    evidence: { kind: "unknown", count: { loads: 0, reads: 0 } },
+    evidence: { kind: "unknown", count: { invokes: 0, loads: 0, reads: 0 } },
   }));
 }
 
@@ -131,6 +161,7 @@ async function buildSnapshot(options: LearnOptions, store: HistoryStore): Promis
       includeSubagents: options.includeSubagents,
       projectPath: options.projectPath ?? options.cwd,
       dbPath: store.getDbPath(),
+      ...selectedSort(options),
     },
   };
 }
@@ -160,7 +191,21 @@ async function main(): Promise<void> {
 
   if (options.json) {
     store.close();
-    await new Promise<void>((resolveWrite, rejectWrite) => process.stdout.write(`${JSON.stringify(snapshot, null, 2)}\n`, (error) => error ? rejectWrite(error) : resolveWrite()));
+    const state = createInitialState();
+    const sort = selectedSort(options);
+    state.sortKey = sort.sortKey;
+    state.sortDirection = sort.sortDirection;
+    const ordered = filterCapabilities(snapshot, state);
+    const observationById = new Map(snapshot.observations.map((item) => [item.capabilityId, item]));
+    const output = {
+      ...snapshot,
+      catalog: { ...snapshot.catalog, capabilities: ordered.map((item) => item.capability) },
+      observations: ordered.flatMap((item) => {
+        const observation = observationById.get(item.capability.id);
+        return observation ? [observation] : [];
+      }),
+    };
+    await new Promise<void>((resolveWrite, rejectWrite) => process.stdout.write(`${JSON.stringify(output, null, 2)}\n`, (error) => error ? rejectWrite(error) : resolveWrite()));
     return;
   }
 

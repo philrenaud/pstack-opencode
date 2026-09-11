@@ -19,7 +19,7 @@ const snapshot: SnapshotResult = {
       {
         id: "playbook:feature",
         kind: "playbook",
-        name: "Feature",
+        name: "Z Feature",
         summary: "Implement a feature.",
         sourcePath: "/x/skills/poteto-mode/playbooks/feature.md",
         invocation: "Use the feature playbook to build behavior.",
@@ -37,7 +37,7 @@ const snapshot: SnapshotResult = {
         capabilityId: "skill:how",
         evidence: {
           kind: "observed",
-          count: { loads: 1, reads: 0 },
+          count: { invokes: 0, loads: 1, reads: 0 },
           lastSeenAt: new Date().toISOString(),
           lastSessionId: "s1",
           lastSessionParent: false,
@@ -54,7 +54,7 @@ const snapshot: SnapshotResult = {
           ],
         },
       },
-      { capabilityId: "playbook:feature", evidence: { kind: "not-observed", count: { loads: 0, reads: 0 } } },
+      { capabilityId: "playbook:feature", evidence: { kind: "not-observed", count: { invokes: 0, loads: 0, reads: 0 } } },
     ],
     sessionCount: 1,
     oldestSessionAt: new Date().toISOString(),
@@ -67,7 +67,7 @@ const snapshot: SnapshotResult = {
         capabilityId: "skill:how",
         evidence: {
           kind: "observed",
-          count: { loads: 1, reads: 0 },
+          count: { invokes: 0, loads: 1, reads: 0 },
           lastSeenAt: new Date().toISOString(),
           lastSessionId: "s1",
           lastSessionParent: false,
@@ -84,7 +84,7 @@ const snapshot: SnapshotResult = {
           ],
         },
       },
-    { capabilityId: "playbook:feature", evidence: { kind: "not-observed", count: { loads: 0, reads: 0 } } },
+    { capabilityId: "playbook:feature", evidence: { kind: "not-observed", count: { invokes: 0, loads: 0, reads: 0 } } },
   ],
   options: {
     scope: "project",
@@ -124,6 +124,33 @@ test("filters by search and hide observed", () => {
   expect(items[0]?.capability.id).toBe("playbook:feature");
 });
 
+test("sorts metrics and last used with stable unknown-last ordering", () => {
+  const data = structuredClone(snapshot);
+  const observed = data.observations[0];
+  if (!observed || observed.evidence.kind !== "observed") throw new Error("fixture is incomplete");
+  observed.evidence.count = { invokes: 2, loads: 3, reads: 5 };
+  observed.evidence.lastSeenAt = "2024-02-03T00:00:00.000Z";
+  const state = createInitialState();
+  state.sortKey = "usage";
+  state.sortDirection = "desc";
+  expect(filterCapabilities(data, state).map((item) => item.capability.id)).toEqual(["skill:how", "playbook:feature"]);
+  state.sortDirection = "asc";
+  expect(filterCapabilities(data, state).map((item) => item.capability.id)).toEqual(["playbook:feature", "skill:how"]);
+  state.sortKey = "last-used";
+  expect(filterCapabilities(data, state).map((item) => item.capability.id)).toEqual(["skill:how", "playbook:feature"]);
+  state.sortDirection = "desc";
+  expect(filterCapabilities(data, state).map((item) => item.capability.id)).toEqual(["skill:how", "playbook:feature"]);
+});
+
+test("scales observation bars and distinguishes unknown", async () => {
+  const { observationBarWidth } = await import("./view");
+  expect(observationBarWidth(0, 10, 20)).toBe(0);
+  expect(observationBarWidth(1, 10, 20)).toBe(2);
+  expect(observationBarWidth(5, 10, 20)).toBe(10);
+  expect(observationBarWidth(10, 10, 20)).toBe(20);
+  expect(observationBarWidth(undefined, 10, 20)).toBeUndefined();
+});
+
 test("renders compact hint for tiny terminal", () => {
   const state = createInitialState();
   const frame = renderFrame(snapshot, state, 30, 10);
@@ -136,7 +163,7 @@ test("renders a plain, useful wide frame without mutating state", () => {
   const before = structuredClone(state);
   const frame = renderFrame(snapshot, state, 120, 30);
   expect(frame.some((line) => line.includes("Try next"))).toBeTrue();
-  expect(frame.some((line) => line.includes("TYPE NAME") && line.includes("LOADS READS"))).toBeTrue();
+  expect(frame.some((line) => line.includes("TYPE NAME") && line.includes("INVOKE LOAD READ"))).toBeTrue();
   expect(frame.some((line) => line.includes("INVOKE Use the feature playbook"))).toBeTrue();
   expect(frame.some((line) => line.includes("Refreshed") && line.includes("in 1ms"))).toBeTrue();
   expect(frame.join("\n")).not.toContain("\u001b[");
@@ -149,7 +176,7 @@ test("unknown evidence is neither not-observed nor suggested", () => {
     history: { kind: "unavailable", reason: "database missing", readAt: new Date().toISOString(), durationMs: 2, warnings: [] },
     observations: snapshot.catalog.capabilities.map((capability) => ({
       capabilityId: capability.id,
-      evidence: { kind: "unknown", count: { loads: 0, reads: 0 } },
+      evidence: { kind: "unknown", count: { invokes: 0, loads: 0, reads: 0 } },
     })),
   };
   const state = createInitialState();
@@ -223,7 +250,7 @@ test("examples view shows empty and unknown messages", () => {
     observations: [
       {
         capabilityId: "skill:how",
-        evidence: { kind: "unknown", count: { loads: 0, reads: 0 } },
+        evidence: { kind: "unknown", count: { invokes: 0, loads: 0, reads: 0 } },
       },
       snapshot.observations[1]!,
     ],

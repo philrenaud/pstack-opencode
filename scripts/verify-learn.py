@@ -179,6 +179,11 @@ try:
         assert len(snapshot["catalog"]["capabilities"]) >= 69
         assert snapshot["history"]["kind"] == "available"
         print("PASS complete JSON output through a pipe")
+        sorted_report = subprocess.run([*command, "--json", "--sort", "loads"], cwd=root, capture_output=True, check=True, timeout=20)
+        ordered = json.loads(sorted_report.stdout)
+        assert ordered["catalog"]["capabilities"][0]["id"] == "skill:architect"
+        assert ordered["options"]["sortDirection"] == "desc"
+        print("PASS usage-sorted JSON orders observed capabilities first")
         terminal = Terminal(command, 120, 24)
         try:
             terminal.wait("Catalog")
@@ -193,7 +198,8 @@ try:
                     transcript.extend(chunk)
                     terminal.consume(chunk)
             left = "\n".join("".join(row[:58]) for row in terminal.screen[4:-3])
-            assert target_name in left, f"Down selected {target_name} but left viewport did not reveal it: {left}"
+            selected_line = next((line for line in left.splitlines() if "›" in line), "")
+            assert target_name[:10] in selected_line, f"Down selected {target_name} but left viewport did not reveal it: {left}"
             terminal.key(b"\x1b[6~", "Catalog")
             deadline = time.monotonic() + 1
             while time.monotonic() < deadline:
@@ -203,7 +209,8 @@ try:
                     transcript.extend(chunk)
                     terminal.consume(chunk)
             left = "\n".join("".join(row[:58]) for row in terminal.screen[4:-3])
-            assert capabilities[42]["name"] in left, f"PageDown did not reveal selected row: {left}"
+            selected_line = next((line for line in left.splitlines() if "›" in line), "")
+            assert capabilities[42]["name"][:10] in selected_line, f"PageDown did not reveal selected row: {left}"
             terminal.key(b"\x1b[F", "why")
             left = "\n".join("".join(row[:58]) for row in terminal.screen[4:-3])
             assert "why" in left and "architect" not in left, f"End did not scroll catalog: {left}"
@@ -216,6 +223,11 @@ try:
         terminal = Terminal(command)
         try:
             terminal.wait("pstack learn")
+            terminal.key(b"3", "LOAD↓")
+            terminal.key(b"v", "LOAD↑")
+            terminal.key(b"l", "LAST USED↓")
+            terminal.wait("━")
+            terminal.key(b"1", "CAPABILITY↑")
             terminal.key(b"/architect\r", "INVOKE")
             terminal.wait("loads 1")
             add_load(2)

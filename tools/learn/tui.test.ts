@@ -91,7 +91,7 @@ function makeSnapshot(dbPath: string, withIds = true): SnapshotResult {
         {
           id: "playbook:feature",
           kind: "playbook",
-          name: "Feature",
+          name: "Z Feature",
           summary: "Implement a feature.",
           sourcePath: "/x/skills/poteto-mode/playbooks/feature.md",
           invocation: "Use the feature playbook to build behavior.",
@@ -109,14 +109,14 @@ function makeSnapshot(dbPath: string, withIds = true): SnapshotResult {
           capabilityId: "skill:how",
           evidence: {
             kind: "observed",
-            count: { loads: 1, reads: 0 },
+            count: { invokes: 0, loads: 1, reads: 0 },
             lastSeenAt: new Date().toISOString(),
             lastSessionId: "session-a",
             lastSessionParent: false,
             recentExamples,
           },
         },
-        { capabilityId: "playbook:feature", evidence: { kind: "not-observed", count: { loads: 0, reads: 0 } } },
+        { capabilityId: "playbook:feature", evidence: { kind: "not-observed", count: { invokes: 0, loads: 0, reads: 0 } } },
       ],
       sessionCount: 1,
       oldestSessionAt: new Date().toISOString(),
@@ -129,14 +129,14 @@ function makeSnapshot(dbPath: string, withIds = true): SnapshotResult {
         capabilityId: "skill:how",
         evidence: {
           kind: "observed",
-          count: { loads: 1, reads: 0 },
+          count: { invokes: 0, loads: 1, reads: 0 },
           lastSeenAt: new Date().toISOString(),
           lastSessionId: "session-a",
           lastSessionParent: false,
           recentExamples,
         },
       },
-      { capabilityId: "playbook:feature", evidence: { kind: "not-observed", count: { loads: 0, reads: 0 } } },
+      { capabilityId: "playbook:feature", evidence: { kind: "not-observed", count: { invokes: 0, loads: 0, reads: 0 } } },
     ],
     options: {
       scope: "project",
@@ -182,7 +182,73 @@ function makeLargeSnapshot(dbPath: string): SnapshotResult {
   }));
   snapshot.observations = snapshot.catalog.capabilities.map((capability) => ({
     capabilityId: capability.id,
-    evidence: { kind: "not-observed" as const, count: { loads: 0, reads: 0 } },
+    evidence: { kind: "not-observed" as const, count: { invokes: 0, loads: 0, reads: 0 } },
+  }));
+  if (snapshot.history.kind === "available") snapshot.history.observations = snapshot.observations;
+  return snapshot;
+}
+
+function makeColumnSnapshot(dbPath: string): SnapshotResult {
+  const snapshot = makeSnapshot(dbPath);
+  const names = [
+    "short",
+    "principle-migrate-callers-then-delete-legacy-apis",
+    "medium-capability",
+    "separate-before-serializing-shared-state",
+    ...Array.from({ length: 24 }, (_, index) => `filler-${String(index).padStart(2, "0")}`),
+  ];
+  snapshot.catalog.capabilities = names.map((name, index) => ({
+    id: `skill:${name}`,
+    kind: "principle" as const,
+    name,
+    summary: `Capability ${index}.`,
+    sourcePath: `/x/principles/${name}/SKILL.md`,
+    sourceDir: `/x/principles/${name}`,
+    invocation: `Use ${name}.`,
+    whyTry: `Try ${name}.`,
+  }));
+  snapshot.observations = snapshot.catalog.capabilities.map((capability) => ({
+    capabilityId: capability.id,
+    evidence: {
+      kind: "observed" as const,
+      count: { invokes: 0, loads: 12, reads: 345 },
+      lastSeenAt: new Date().toISOString(),
+      lastSessionId: "session-a",
+      lastSessionParent: false,
+      recentExamples: [],
+    },
+  }));
+  if (snapshot.history.kind === "available") snapshot.history.observations = snapshot.observations;
+  return snapshot;
+}
+
+function makeUsageSnapshot(dbPath: string): SnapshotResult {
+  const snapshot = makeSnapshot(dbPath);
+  const usages = [
+    { name: "Maximum usage", loads: 20 },
+    { name: "Half usage", loads: 10 },
+    { name: "Zero usage", loads: 0 },
+  ];
+  snapshot.catalog.capabilities = usages.map(({ name }, index) => ({
+    id: `skill:usage-${index}`,
+    kind: "skill" as const,
+    name,
+    summary: `${name}.`,
+    sourcePath: `/x/skills/usage-${index}/SKILL.md`,
+    sourceDir: `/x/skills/usage-${index}`,
+    invocation: `Use usage ${index}.`,
+    whyTry: `Try usage ${index}.`,
+  }));
+  snapshot.observations = snapshot.catalog.capabilities.map((capability, index) => ({
+    capabilityId: capability.id,
+    evidence: {
+      kind: "observed" as const,
+      count: { invokes: 0, loads: usages[index]!.loads, reads: 0 },
+      lastSeenAt: new Date().toISOString(),
+      lastSessionId: "session-a",
+      lastSessionParent: false,
+      recentExamples: [],
+    },
   }));
   if (snapshot.history.kind === "available") snapshot.history.observations = snapshot.observations;
   return snapshot;
@@ -195,6 +261,88 @@ function leftPane(frame: string, width = 58): string {
   return lines.slice(first, last + 1).map((line) => line.slice(0, width)).join("\n");
 }
 
+function catalogLines(frame: string): string[] {
+  return leftPane(frame, frame.split("\n")[0]?.length ?? 0).split("\n");
+}
+
+function expectAlignedCatalogColumns(frame: string): void {
+  const lines = catalogLines(frame);
+  const header = lines.find((line) => line.includes("CAPABILITY") && line.includes("INVOKE"));
+  const rows = lines.filter((line) => line.includes("PR") && /\s0\s+12\s+345\s/.test(line));
+  if (!header) throw new Error("catalog header was not rendered");
+  expect(rows.length).toBeGreaterThan(0);
+  const starts = [header.indexOf("INVOKE"), header.indexOf("LOAD"), header.indexOf("READ")];
+  for (const row of rows) {
+    expect([row.indexOf("0", starts[0]), row.indexOf("12", starts[1]), row.indexOf("345", starts[2])]).toEqual(starts);
+  }
+}
+
+function renderedCatalogNames(frame: string, names: readonly string[]): string[] {
+  return leftPane(frame).split("\n")
+    .flatMap((line) => names.filter((name) => line.includes(name)))
+    .filter((name, index, found) => found.indexOf(name) === index);
+}
+
+function renderedBarWidth(frame: string, name: string): number {
+  const lines = leftPane(frame).split("\n");
+  const row = lines.findIndex((line) => line.includes(name));
+  if (row < 0) throw new Error(`${name} was not rendered`);
+  return lines[row + 1]?.match(/━/g)?.length ?? 0;
+}
+
+test("first native frame sizes usage bars from the laid-out name column and resize scales them", async () => {
+  const snapshot = makeUsageSnapshot(createFixtureDb());
+  const setup = await createTestRenderer({ width: 120, height: 24 });
+  activeSetup = setup;
+  const app = await createInteractiveApp(
+    setup.renderer,
+    { ...baseOptions(), sortKey: "usage" },
+    fakeStore(),
+    snapshot,
+    async () => snapshot,
+    { listenForSignals: false },
+  );
+
+  await setup.flush();
+  let frame = setup.captureCharFrame();
+  const initialMaximum = renderedBarWidth(frame, "Maximum usage");
+  const initialHalf = renderedBarWidth(frame, "Half usage");
+  expect(initialMaximum).toBeGreaterThan(10);
+  expect(initialHalf).toBeGreaterThanOrEqual(Math.floor(initialMaximum / 2) - 1);
+  expect(initialHalf).toBeLessThanOrEqual(Math.ceil(initialMaximum / 2) + 1);
+  expect(renderedBarWidth(frame, "Zero usage")).toBe(0);
+
+  setup.resize(160, 24);
+  await setup.flush();
+  frame = setup.captureCharFrame();
+  const resizedMaximum = renderedBarWidth(frame, "Maximum usage");
+  const resizedHalf = renderedBarWidth(frame, "Half usage");
+  expect(resizedMaximum).toBeGreaterThan(initialMaximum);
+  expect(resizedHalf).toBeGreaterThanOrEqual(Math.floor(resizedMaximum / 2) - 1);
+  expect(resizedHalf).toBeLessThanOrEqual(Math.ceil(resizedMaximum / 2) + 1);
+  expect(renderedBarWidth(frame, "Zero usage")).toBe(0);
+  app.shutdown();
+});
+
+test("numeric sort defaults to descending in the rendered catalog", async () => {
+  const snapshot = makeUsageSnapshot(createFixtureDb());
+  const numericSetup = await createTestRenderer({ width: 120, height: 40 });
+  activeSetup = numericSetup;
+  const numericApp = await createInteractiveApp(
+    numericSetup.renderer,
+    { ...baseOptions(), sortKey: "usage" },
+    fakeStore(),
+    snapshot,
+    async () => snapshot,
+    { listenForSignals: false },
+  );
+  await numericSetup.flush();
+
+  expect(renderedCatalogNames(numericSetup.captureCharFrame(), ["Maximum usage", "Half usage", "Zero usage"]))
+    .toEqual(["Maximum usage", "Half usage", "Zero usage"]);
+  numericApp.shutdown();
+});
+
 test("selection scrolls the left catalog viewport beyond one screen", async () => {
   const { setup, app } = await bootstrap(makeLargeSnapshot(createFixtureDb()), { width: 120, height: 24 });
 
@@ -203,7 +351,7 @@ test("selection scrolls the left catalog viewport beyond one screen", async () =
   await setup.flush();
 
   const pane = leftPane(setup.captureCharFrame());
-  expect(pane).toContain("catalog-capability-30");
+  expect(pane).toContain("catalog-capability-25");
   expect(pane).not.toContain("catalog-capability-00");
   app.shutdown();
 });
@@ -220,7 +368,7 @@ test("End, Home, and PageUp keep the selected catalog row visible", async () => 
   setup.mockInput.pressKey("\u001b[5~");
   await setup.flush();
   pane = leftPane(setup.captureCharFrame());
-  expect(pane).toContain("› SK  catalog-capability-57");
+  expect(pane).toContain("› SK  catalog-capability-62");
 
   setup.mockInput.pressKey("\u001b[H");
   await setup.flush();
@@ -285,6 +433,27 @@ test("initial load renders catalog with header, chips, and footer help", async (
   app.shutdown();
 });
 
+test("sort keys change order and preserve the selected capability", async () => {
+  const { setup, app } = await bootstrap(makeSnapshot(createFixtureDb()));
+  expect(leftPane(setup.captureCharFrame())).toContain("› SK  How");
+
+  setup.mockInput.pressKey("2");
+  await setup.flush();
+  expect(app.getState()).toMatchObject({ sortKey: "invokes", sortDirection: "desc" });
+  expect(leftPane(setup.captureCharFrame())).toContain("INVOKE↓");
+
+  setup.mockInput.pressKey("v");
+  await setup.flush();
+  expect(app.getState()).toMatchObject({ sortKey: "invokes", sortDirection: "asc" });
+  expect(leftPane(setup.captureCharFrame())).toContain("› SK  How");
+
+  setup.mockInput.pressKey("l");
+  await setup.flush();
+  expect(app.getState()).toMatchObject({ sortKey: "last-used", sortDirection: "desc" });
+  expect(leftPane(setup.captureCharFrame())).toContain("LAST USED↓");
+  app.shutdown();
+});
+
 test("Enter opens recent examples, second Enter loads exact context and Escape returns", async () => {
   const dbPath = createFixtureDb();
   const snapshot = makeSnapshot(dbPath);
@@ -312,6 +481,43 @@ test("Enter opens recent examples, second Enter loads exact context and Escape r
   await setup.flush();
   expect(app.getState().focus).toBe("examples");
 
+  app.shutdown();
+});
+
+test("invocation example opens the exact user task with an invocation marker", async () => {
+  const dbPath = join(makeTempDir("learn-tui-invoke-"), "events.db");
+  const db = new Database(dbPath, { create: true });
+  db.exec(`
+    create table session (id text primary key, parent_id text);
+    create table message (id text primary key, session_id text not null, time_created integer not null, data text not null);
+    create table part (id text primary key, message_id text not null, session_id text not null, time_created integer not null, data text not null);
+  `);
+  db.query("insert into session values (?, ?)").run("session-a", null);
+  db.query("insert into message values (?, ?, ?, ?)").run("invoke-user", "session-a", 1_000, JSON.stringify({ role: "user" }));
+  db.query("insert into part values (?, ?, ?, ?, ?)").run(
+    "invoke-part", "invoke-user", "session-a", 1_001,
+    JSON.stringify({ type: "text", text: "# How\n\nInstructions.\n\nBase directory for this skill: /x/skills/how\nRelative paths in this skill are relative.\n\nExplain the renderer." }),
+  );
+  db.close();
+  const snapshot = makeSnapshot(dbPath);
+  const observed = snapshot.observations[0];
+  if (!observed || observed.evidence.kind !== "observed") throw new Error("fixture is incomplete");
+  observed.evidence.count = { invokes: 1, loads: 0, reads: 0 };
+  observed.evidence.recentExamples = [{
+    kind: "invoke", at: new Date(1_001).toISOString(), sessionId: "session-a",
+    sessionTitle: "Session One", directory: "/project", isSubagent: false,
+    action: "invoke(how)", partId: "invoke-part", messageId: "invoke-user", skillDir: "/x/skills/how",
+  }];
+  if (snapshot.history.kind === "available") snapshot.history.observations = snapshot.observations;
+  const { setup, app } = await bootstrap(snapshot);
+  setup.mockInput.pressEnter();
+  await setup.flush();
+  setup.mockInput.pressEnter();
+  const frame = await setup.waitForFrame((current) => current.includes("Explain the renderer."));
+  expect(frame).toContain("INVOCATION invoke(how)");
+  expect(frame).not.toContain("Instructions.");
+  expect(frame).toContain("Expanded skill instructions omitted; original task");
+  expect(frame).toContain("shown.");
   app.shutdown();
 });
 
@@ -404,6 +610,45 @@ test("wide catalog renders a long capability name in full", async () => {
   snapshot.catalog.capabilities[0]!.name = "maintain-verification-skill";
   const { setup, app } = await bootstrap(snapshot);
   expect(setup.captureCharFrame()).toContain("maintain-verification-skill");
+  app.shutdown();
+});
+
+test("catalog columns stay aligned across long names, resize, and scrolling", async () => {
+  const snapshot = makeColumnSnapshot(createFixtureDb());
+  const { setup, app } = await bootstrap(snapshot, { width: 80, height: 18 });
+
+  for (const width of [80, 100, 120, 160]) {
+    setup.resize(width, 18);
+    await setup.flush();
+    expectAlignedCatalogColumns(setup.captureCharFrame());
+  }
+
+  setup.resize(100, 18);
+  setup.mockInput.pressKey("\u001b[F");
+  await setup.flush();
+  const scrolled = setup.captureCharFrame();
+  expectAlignedCatalogColumns(scrolled);
+  expect(app.getState().selected).toBe(27);
+  expect(catalogLines(scrolled).some((line) => line.includes("filler-00"))).toBe(false);
+  expect(catalogLines(scrolled).some((line) => line.includes("principle-migrate-callers-then-delete-legacy-apis"))).toBe(false);
+
+  setup.mockInput.pressKey("\u001b[H");
+  setup.mockInput.pressArrow("down");
+  await setup.flush();
+  const longNameFrame = setup.captureCharFrame();
+  expectAlignedCatalogColumns(longNameFrame);
+  expect(catalogLines(longNameFrame).some((line) => line.includes("principle-migrate-callers-then-delete-legacy-apis"))).toBe(false);
+  expect(longNameFrame).toContain("filler-01");
+
+  setup.mockInput.pressArrow("right");
+  await setup.flush();
+  const detailFrame = setup.captureCharFrame();
+  const detailLines = detailFrame.split("\n");
+  const detailStart = detailLines.find((line) => line.includes("How to invoke"))?.indexOf("╭─How") ?? -1;
+  expect(detailStart).toBeGreaterThan(0);
+  expect(detailLines.map((line) => line.slice(detailStart)).join("").replace(/[│\s]/g, "")).toContain(
+    "filler-01",
+  );
   app.shutdown();
 });
 

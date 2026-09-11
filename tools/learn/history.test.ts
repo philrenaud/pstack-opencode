@@ -6,6 +6,7 @@ import { HistoryStore } from "./history";
 import {
   createDb,
   insertPart,
+  insertMessage,
   insertProject,
   insertSession,
   makeCatalogFixture,
@@ -17,6 +18,72 @@ import {
 } from "./test-helpers";
 
 const DAY = 24 * 60 * 60 * 1000;
+
+test("counts only anchored user invocations and keeps them separate from loads", async () => {
+  const root = makeTempDir("learn-history-invokes-");
+  makeCatalogFixture(root);
+  const dbPath = join(root, "events.db");
+  const db = createDb(dbPath);
+  const now = Date.now();
+  const projectPath = join(root, "project-a");
+  insertProject(db, "p1", projectPath);
+  insertSession(db, { id: "s1", projectId: "p1", directory: projectPath, created: now - DAY, updated: now });
+  const addText = (id: string, text: string, synthetic: boolean | null = null, role: "user" | "assistant" = "user") => {
+    insertMessage(db, { id: `msg-${id}`, sessionId: "s1", created: now - 100, role });
+    insertPart(db, { id, sessionId: "s1", created: now - 100, updated: now - 100, data: { type: "text", text, synthetic } });
+  };
+  const howDir = join(root, "skills/how");
+  addText("expanded", `# How\n\nInstructions.\n\nBase directory for this skill: ${howDir}\nRelative paths in this skill are relative.\n\nExplain this.`);
+  addText("raw", "/how explain this");
+  addText("quoted", "Please quote /how explain this");
+  addText("foreign", "# How\n\nBase directory for this skill: /tmp/skills/how\n\nTask");
+  addText("synthetic", `# How\n\nBase directory for this skill: ${howDir}\n\nTask`, true);
+  addText("assistant", "/how no", null, "assistant");
+  insertPart(db, { id: "load", sessionId: "s1", created: now - 50, updated: now - 50, data: skillPart("how", "completed", howDir, now - 40) });
+  db.close();
+
+  const result = await new HistoryStore(dbPath).refresh(await discoverCatalog(root), opts(dbPath, projectPath));
+  const how = observation(result, "skill:how");
+  expect(how?.evidence.kind).toBe("observed");
+  if (how?.evidence.kind === "observed") {
+    expect(how.evidence.count).toEqual({ invokes: 2, loads: 1, reads: 0 });
+    expect(how.evidence.recentExamples?.filter((item) => item.kind === "invoke").map((item) => item.action).sort()).toEqual(["/how", "invoke(how)"]);
+    expect(how.evidence.recentExamples?.find((item) => item.action === "invoke(how)")?.messageId).toBe("msg-expanded");
+  }
+});
+
+test("invocations obey project, child-session, and time filters", async () => {
+  const root = makeTempDir("learn-history-invoke-scope-");
+  makeCatalogFixture(root);
+  const dbPath = join(root, "events.db");
+  const db = createDb(dbPath);
+  const now = Date.now();
+  const here = join(root, "here");
+  const there = join(root, "there");
+  insertProject(db, "p1", here);
+  insertProject(db, "p2", there);
+  insertSession(db, { id: "parent", projectId: "p1", directory: here, created: now - 40 * DAY, updated: now });
+  insertSession(db, { id: "child", projectId: "p1", parentId: "parent", directory: here, created: now - DAY, updated: now });
+  insertSession(db, { id: "other", projectId: "p2", directory: there, created: now - DAY, updated: now });
+  const add = (id: string, sessionId: string, at: number) => {
+    insertMessage(db, { id: `msg-${id}`, sessionId, created: at, role: "user" });
+    insertPart(db, { id, sessionId, created: at, updated: at, data: { type: "text", text: "/how task" } });
+  };
+  add("old", "parent", now - 35 * DAY);
+  add("child", "child", now - 200);
+  add("other", "other", now - 100);
+  db.close();
+
+  const catalog = await discoverCatalog(root);
+  const store = new HistoryStore(dbPath);
+  const base = await store.refresh(catalog, opts(dbPath, here));
+  expect(observation(base, "skill:how")?.evidence.kind).toBe("not-observed");
+  const children = await store.refresh(catalog, { ...opts(dbPath, here), includeSubagents: true });
+  const how = observation(children, "skill:how");
+  expect(how?.evidence.kind === "observed" && how.evidence.count.invokes).toBe(1);
+  expect(how?.evidence.kind === "observed" && how.evidence.recentExamples?.[0]?.sessionId).toBe("child");
+  store.close();
+});
 
 function opts(dbPath: string, cwd: string) {
   return {
