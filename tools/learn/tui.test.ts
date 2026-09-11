@@ -91,7 +91,7 @@ function makeSnapshot(dbPath: string, withIds = true): SnapshotResult {
         {
           id: "playbook:feature",
           kind: "playbook",
-          name: "Feature",
+          name: "Z Feature",
           summary: "Implement a feature.",
           sourcePath: "/x/skills/poteto-mode/playbooks/feature.md",
           invocation: "Use the feature playbook to build behavior.",
@@ -222,6 +222,38 @@ function makeColumnSnapshot(dbPath: string): SnapshotResult {
   return snapshot;
 }
 
+function makeUsageSnapshot(dbPath: string): SnapshotResult {
+  const snapshot = makeSnapshot(dbPath);
+  const usages = [
+    { name: "Maximum usage", loads: 20 },
+    { name: "Half usage", loads: 10 },
+    { name: "Zero usage", loads: 0 },
+  ];
+  snapshot.catalog.capabilities = usages.map(({ name }, index) => ({
+    id: `skill:usage-${index}`,
+    kind: "skill" as const,
+    name,
+    summary: `${name}.`,
+    sourcePath: `/x/skills/usage-${index}/SKILL.md`,
+    sourceDir: `/x/skills/usage-${index}`,
+    invocation: `Use usage ${index}.`,
+    whyTry: `Try usage ${index}.`,
+  }));
+  snapshot.observations = snapshot.catalog.capabilities.map((capability, index) => ({
+    capabilityId: capability.id,
+    evidence: {
+      kind: "observed" as const,
+      count: { invokes: 0, loads: usages[index]!.loads, reads: 0 },
+      lastSeenAt: new Date().toISOString(),
+      lastSessionId: "session-a",
+      lastSessionParent: false,
+      recentExamples: [],
+    },
+  }));
+  if (snapshot.history.kind === "available") snapshot.history.observations = snapshot.observations;
+  return snapshot;
+}
+
 function leftPane(frame: string, width = 58): string {
   const lines = frame.split("\n");
   const first = lines.findIndex((line) => line.includes("Catalog"));
@@ -245,6 +277,72 @@ function expectAlignedCatalogColumns(frame: string): void {
   }
 }
 
+function renderedCatalogNames(frame: string, names: readonly string[]): string[] {
+  return leftPane(frame).split("\n")
+    .flatMap((line) => names.filter((name) => line.includes(name)))
+    .filter((name, index, found) => found.indexOf(name) === index);
+}
+
+function renderedBarWidth(frame: string, name: string): number {
+  const lines = leftPane(frame).split("\n");
+  const row = lines.findIndex((line) => line.includes(name));
+  if (row < 0) throw new Error(`${name} was not rendered`);
+  return lines[row + 1]?.match(/━/g)?.length ?? 0;
+}
+
+test("first native frame sizes usage bars from the laid-out name column and resize scales them", async () => {
+  const snapshot = makeUsageSnapshot(createFixtureDb());
+  const setup = await createTestRenderer({ width: 120, height: 24 });
+  activeSetup = setup;
+  const app = await createInteractiveApp(
+    setup.renderer,
+    { ...baseOptions(), sortKey: "usage" },
+    fakeStore(),
+    snapshot,
+    async () => snapshot,
+    { listenForSignals: false },
+  );
+
+  await setup.flush();
+  let frame = setup.captureCharFrame();
+  const initialMaximum = renderedBarWidth(frame, "Maximum usage");
+  const initialHalf = renderedBarWidth(frame, "Half usage");
+  expect(initialMaximum).toBeGreaterThan(10);
+  expect(initialHalf).toBeGreaterThanOrEqual(Math.floor(initialMaximum / 2) - 1);
+  expect(initialHalf).toBeLessThanOrEqual(Math.ceil(initialMaximum / 2) + 1);
+  expect(renderedBarWidth(frame, "Zero usage")).toBe(0);
+
+  setup.resize(160, 24);
+  await setup.flush();
+  frame = setup.captureCharFrame();
+  const resizedMaximum = renderedBarWidth(frame, "Maximum usage");
+  const resizedHalf = renderedBarWidth(frame, "Half usage");
+  expect(resizedMaximum).toBeGreaterThan(initialMaximum);
+  expect(resizedHalf).toBeGreaterThanOrEqual(Math.floor(resizedMaximum / 2) - 1);
+  expect(resizedHalf).toBeLessThanOrEqual(Math.ceil(resizedMaximum / 2) + 1);
+  expect(renderedBarWidth(frame, "Zero usage")).toBe(0);
+  app.shutdown();
+});
+
+test("numeric sort defaults to descending in the rendered catalog", async () => {
+  const snapshot = makeUsageSnapshot(createFixtureDb());
+  const numericSetup = await createTestRenderer({ width: 120, height: 40 });
+  activeSetup = numericSetup;
+  const numericApp = await createInteractiveApp(
+    numericSetup.renderer,
+    { ...baseOptions(), sortKey: "usage" },
+    fakeStore(),
+    snapshot,
+    async () => snapshot,
+    { listenForSignals: false },
+  );
+  await numericSetup.flush();
+
+  expect(renderedCatalogNames(numericSetup.captureCharFrame(), ["Maximum usage", "Half usage", "Zero usage"]))
+    .toEqual(["Maximum usage", "Half usage", "Zero usage"]);
+  numericApp.shutdown();
+});
+
 test("selection scrolls the left catalog viewport beyond one screen", async () => {
   const { setup, app } = await bootstrap(makeLargeSnapshot(createFixtureDb()), { width: 120, height: 24 });
 
@@ -253,7 +351,7 @@ test("selection scrolls the left catalog viewport beyond one screen", async () =
   await setup.flush();
 
   const pane = leftPane(setup.captureCharFrame());
-  expect(pane).toContain("catalog-capability-30");
+  expect(pane).toContain("catalog-capability-25");
   expect(pane).not.toContain("catalog-capability-00");
   app.shutdown();
 });
@@ -270,7 +368,7 @@ test("End, Home, and PageUp keep the selected catalog row visible", async () => 
   setup.mockInput.pressKey("\u001b[5~");
   await setup.flush();
   pane = leftPane(setup.captureCharFrame());
-  expect(pane).toContain("› SK  catalog-capability-57");
+  expect(pane).toContain("› SK  catalog-capability-62");
 
   setup.mockInput.pressKey("\u001b[H");
   await setup.flush();
@@ -332,6 +430,27 @@ test("initial load renders catalog with header, chips, and footer help", async (
   expect(frame).toContain("Feature");
   expect(frame).toContain("Try next:");
   expect(frame).toContain("help");
+  app.shutdown();
+});
+
+test("sort keys change order and preserve the selected capability", async () => {
+  const { setup, app } = await bootstrap(makeSnapshot(createFixtureDb()));
+  expect(leftPane(setup.captureCharFrame())).toContain("› SK  How");
+
+  setup.mockInput.pressKey("2");
+  await setup.flush();
+  expect(app.getState()).toMatchObject({ sortKey: "invokes", sortDirection: "desc" });
+  expect(leftPane(setup.captureCharFrame())).toContain("INVOKE↓");
+
+  setup.mockInput.pressKey("v");
+  await setup.flush();
+  expect(app.getState()).toMatchObject({ sortKey: "invokes", sortDirection: "asc" });
+  expect(leftPane(setup.captureCharFrame())).toContain("› SK  How");
+
+  setup.mockInput.pressKey("l");
+  await setup.flush();
+  expect(app.getState()).toMatchObject({ sortKey: "last-used", sortDirection: "desc" });
+  expect(leftPane(setup.captureCharFrame())).toContain("LAST USED↓");
   app.shutdown();
 });
 
@@ -509,7 +628,8 @@ test("catalog columns stay aligned across long names, resize, and scrolling", as
   await setup.flush();
   const scrolled = setup.captureCharFrame();
   expectAlignedCatalogColumns(scrolled);
-  expect(catalogLines(scrolled).some((line) => line.includes("filler-23"))).toBe(true);
+  expect(app.getState().selected).toBe(27);
+  expect(catalogLines(scrolled).some((line) => line.includes("filler-00"))).toBe(false);
   expect(catalogLines(scrolled).some((line) => line.includes("principle-migrate-callers-then-delete-legacy-apis"))).toBe(false);
 
   setup.mockInput.pressKey("\u001b[H");
@@ -518,7 +638,7 @@ test("catalog columns stay aligned across long names, resize, and scrolling", as
   const longNameFrame = setup.captureCharFrame();
   expectAlignedCatalogColumns(longNameFrame);
   expect(catalogLines(longNameFrame).some((line) => line.includes("principle-migrate-callers-then-delete-legacy-apis"))).toBe(false);
-  expect(longNameFrame).toContain("principle-migrate-callers");
+  expect(longNameFrame).toContain("filler-01");
 
   setup.mockInput.pressArrow("right");
   await setup.flush();
@@ -527,7 +647,7 @@ test("catalog columns stay aligned across long names, resize, and scrolling", as
   const detailStart = detailLines.find((line) => line.includes("How to invoke"))?.indexOf("╭─How") ?? -1;
   expect(detailStart).toBeGreaterThan(0);
   expect(detailLines.map((line) => line.slice(detailStart)).join("").replace(/[│\s]/g, "")).toContain(
-    "principle-migrate-callers-then-delete-legacy-apis",
+    "filler-01",
   );
   app.shutdown();
 });

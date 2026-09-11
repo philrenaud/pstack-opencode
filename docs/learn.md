@@ -22,6 +22,20 @@ The dashboard lists skills, principles, and poteto-mode playbooks from the files
 
 Press `u` to see only capabilities not observed in the selected history. Press `n` to jump to a suggested capability. Suggestions use a fixed beginner-friendly order followed by an alphabetical fallback. They are ideas to try, not assessments of your proficiency.
 
+## Sort and compare usage
+
+Press `o` to cycle sort columns, `v` to reverse direction, or `l` for most recently used first. Keys `1` through `6` select name, invokes, loads, reads, total usage, and last used. You can also click a name or count column header. The active header shows its sort direction. Your selected capability stays selected as the list reorders.
+
+Each entry has a small bar beneath its name. Its width represents **invokes + loads + reads**, relative to the largest total in the filtered list. Zero observations leave the bar empty; unknown usage shows `? unknown`. These are observation totals, not completed-task counts. Changing category, search, or history scope rescales the bars.
+
+Last used means the newest recorded invocation, load, or consultation in the selected window. Unknown and missing dates sort last in either direction. The detail pane shows the date.
+
+```sh
+./learn --sort last-used
+./learn --sort usage
+./learn --sort loads --ascending
+```
+
 Press **Enter** to open up to five recent examples for the selected capability, newest first. Select an example with arrows or `j`/`k`, then press **Enter again** to see its exact conversation context. The excerpt includes the nearest original user request, nearby assistant messages, and the actual tool event in chronological order. Escape returns to examples, then to the catalog.
 
 Examples respect the current project, time-window, and child-session filters. Only opening exact context reads message text, on demand, for the selected event's session. Synthetic tool echoes, file dumps, hidden reasoning, and tool outputs are excluded. Excerpts show at most two assistant messages before and after the event and stop before the next original user turn. Long text is capped with explicit truncation notices. Session IDs and resume commands remain available for the full conversation. Missing event IDs or unsupported history show an unavailable explanation rather than a guessed match.
@@ -52,6 +66,9 @@ Use these keys to change the evidence scope:
 | `?` | Show controls and evidence definitions |
 | Enter | Open recent examples for the selected capability |
 | Enter on an example | Open the original conversation around that event |
+| `o` / `v` | Cycle sort columns / reverse direction |
+| `l` | Sort by last used, newest first |
+| `1` through `6` | Name, invokes, loads, reads, usage, last used |
 | Right / Left | Focus details or the list |
 | Ctrl-D / Ctrl-U | Scroll the focused pane |
 | `q` / Ctrl-C | Quit and restore the terminal |

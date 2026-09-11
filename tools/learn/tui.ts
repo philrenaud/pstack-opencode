@@ -21,6 +21,7 @@ import type {
   LearnOptions,
   RecentExample,
   SnapshotResult,
+  SortKey,
   WindowKind,
 } from "./types";
 import { stripControlAndAnsi } from "./types";
@@ -30,6 +31,9 @@ import {
   isSplitLayout,
   recentExamplesFor,
   suggestion,
+  observationBarWidth,
+  sortLabel,
+  totalObservations,
   type CapWithObservation,
   type UiState,
 } from "./view";
@@ -176,6 +180,8 @@ export async function createInteractiveApp(
   state.allProjects = options.allProjects;
   state.includeSubagents = options.includeSubagents;
   state.window = options.window;
+  state.sortKey = options.sortKey ?? "name";
+  state.sortDirection = options.sortDirection ?? (state.sortKey === "name" ? "asc" : "desc");
 
   const contextPane: ContextPaneState = { status: "idle", key: undefined, data: undefined, reason: undefined };
   let contextRequestSeq = 0;
@@ -315,25 +321,29 @@ export async function createInteractiveApp(
 
   interface CatalogRow {
     box: BoxRenderable;
+    metadata: BoxRenderable;
     marker: TextRenderable;
     type: TextRenderable;
     name: TextRenderable;
     loads: TextRenderable;
     reads: TextRenderable;
     invokes: TextRenderable;
+    bar: TextRenderable;
   }
 
   function createCatalogRow(id: string): CatalogRow {
     const box = new BoxRenderable(renderer, {
       id,
       width: "100%",
-      height: 1,
-      flexDirection: "row",
+      height: 2,
+      flexDirection: "column",
       flexShrink: 0,
-      paddingLeft: 1,
-      paddingRight: 1,
       overflow: "hidden",
       backgroundColor: theme.panel,
+    });
+    const metadata = new BoxRenderable(renderer, {
+      width: "100%", height: 1, flexDirection: "row", flexShrink: 0, paddingLeft: 1, paddingRight: 1,
+      overflow: "hidden", backgroundColor: theme.panel,
     });
     const marker = new TextRenderable(renderer, { content: "", width: 2, height: 1, flexShrink: 0, truncate: true });
     const type = new TextRenderable(renderer, { content: "", width: 4, height: 1, flexShrink: 0, truncate: true });
@@ -351,21 +361,24 @@ export async function createInteractiveApp(
     const invokes = new TextRenderable(renderer, { content: "", width: 7, height: 1, flexShrink: 0, truncate: true });
     const loads = new TextRenderable(renderer, { content: "", width: 5, height: 1, flexShrink: 0, truncate: true });
     const reads = new TextRenderable(renderer, { content: "", width: 5, height: 1, flexShrink: 0, truncate: true });
-    box.add(marker);
-    box.add(type);
-    box.add(name);
-    box.add(invokes);
-    box.add(loads);
-    box.add(reads);
-    return { box, marker, type, name, invokes, loads, reads };
+    metadata.add(marker);
+    metadata.add(type);
+    metadata.add(name);
+    metadata.add(invokes);
+    metadata.add(loads);
+    metadata.add(reads);
+    const bar = new TextRenderable(renderer, {
+      content: "", height: 1, marginLeft: 7, marginRight: 18, minWidth: 0, flexGrow: 1,
+      wrapMode: "none", truncate: true, overflow: "hidden",
+    });
+    box.add(metadata);
+    box.add(bar);
+    return { box, metadata, marker, type, name, invokes, loads, reads, bar };
   }
 
   const listHeader = createCatalogRow("list-header");
-  listHeader.type.content = styled([[fg(theme.dim)("TYPE") as TextChunk]]);
-  listHeader.name.content = styled([[fg(theme.dim)(" CAPABILITY") as TextChunk]]);
-  listHeader.invokes.content = styled([[fg(theme.dim)("INVOKE") as TextChunk]]);
-  listHeader.loads.content = styled([[fg(theme.dim)("LOAD") as TextChunk]]);
-  listHeader.reads.content = styled([[fg(theme.dim)("READ") as TextChunk]]);
+  listHeader.box.height = 1;
+  listHeader.bar.visible = false;
   listHeaderGutter.add(listHeader.box);
 
   const rowBoxes: CatalogRow[] = [];
@@ -376,6 +389,7 @@ export async function createInteractiveApp(
   let selectedExampleCardId: string | undefined;
   let listRevealPending = false;
   let rightRevealPending = false;
+  let barRenderPending = false;
 
   function clearRows(): void {
     for (const row of rowBoxes.splice(0)) {
@@ -425,6 +439,32 @@ export async function createInteractiveApp(
   function currentFiltered(): CapWithObservation[] {
     return filterCapabilities(snapshot, state);
   }
+
+  const SORT_KEYS: readonly SortKey[] = ["name", "invokes", "loads", "reads", "usage", "last-used"];
+
+  function setSort(key: SortKey, direction?: UiState["sortDirection"]): void {
+    const selectedId = currentFiltered()[state.selected]?.capability.id;
+    state.sortKey = key;
+    state.sortDirection = direction ?? (key === "name" ? "asc" : "desc");
+    const index = selectedId ? currentFiltered().findIndex((item) => item.capability.id === selectedId) : -1;
+    state.selected = index < 0 ? 0 : index;
+    selectedRowId = undefined;
+  }
+
+  function renderListHeader(): void {
+    const marker = (key: SortKey): string => state.sortKey === key ? (state.sortDirection === "asc" ? "↑" : "↓") : "";
+    listHeader.type.content = styled([[fg(theme.dim)("TYPE") as TextChunk]]);
+    const nameLabel = state.sortKey === "last-used" ? " LAST USED" : state.sortKey === "usage" ? " USAGE" : " CAPABILITY";
+    listHeader.name.content = styled([[fg(theme.dim)(`${nameLabel}${marker(state.sortKey === "usage" || state.sortKey === "last-used" ? state.sortKey : "name")}`) as TextChunk]]);
+    listHeader.invokes.content = styled([[fg(theme.dim)(`INVOKE${marker("invokes")}`) as TextChunk]]);
+    listHeader.loads.content = styled([[fg(theme.dim)(`LOAD${marker("loads")}`) as TextChunk]]);
+    listHeader.reads.content = styled([[fg(theme.dim)(`READ${marker("reads")}`) as TextChunk]]);
+  }
+
+  listHeader.name.onMouseDown = () => { setSort("name"); draw(); };
+  listHeader.invokes.onMouseDown = () => { setSort("invokes"); draw(); };
+  listHeader.loads.onMouseDown = () => { setSort("loads"); draw(); };
+  listHeader.reads.onMouseDown = () => { setSort("reads"); draw(); };
 
   function currentExamples(item: CapWithObservation | undefined): RecentExample[] {
     return recentExamplesFor(item);
@@ -498,6 +538,7 @@ export async function createInteractiveApp(
   }
 
   function renderList(): void {
+    renderListHeader();
     const filtered = currentFiltered();
     ensureVisible(filtered.length);
     const nextRowIds = filtered.map((item) => item.capability.id);
@@ -522,6 +563,7 @@ export async function createInteractiveApp(
       const nameColor = isSelected ? theme.accent : theme.text;
       const evidenceColor = evidence?.evidence.kind === "unknown" ? theme.warn : evidence?.evidence.kind === "observed" ? theme.accent : theme.dim;
       row.box.backgroundColor = isSelected ? theme.accentBg : theme.panel;
+      row.metadata.backgroundColor = isSelected ? theme.accentBg : theme.panel;
       row.marker.content = styled([[fg(isSelected ? theme.accent : theme.dim)(isSelected ? "› " : "  ") as TextChunk]]);
       row.type.content = styled([[fg(theme.dim)(typeBadge(item.capability.kind)) as TextChunk]]);
       row.name.content = styled([[fg(nameColor)(inlineSafe(item.capability.name)) as TextChunk]]);
@@ -529,6 +571,23 @@ export async function createInteractiveApp(
       row.loads.content = styled([[fg(evidenceColor)(loads) as TextChunk]]);
       row.reads.content = styled([[fg(evidenceColor)(reads) as TextChunk]]);
     });
+    if (!barRenderPending) {
+      barRenderPending = true;
+      afterLayout(() => {
+        barRenderPending = false;
+        const laidOut = currentFiltered();
+        const laidOutMaximum = Math.max(0, ...laidOut.map((item) => totalObservations(item) ?? 0));
+        laidOut.forEach((item, index) => {
+          const row = rowBoxes[index];
+          if (!row) return;
+          const filled = observationBarWidth(totalObservations(item), laidOutMaximum, row.name.width);
+          row.bar.content = styled([[
+            fg(filled === undefined ? theme.warn : theme.accent)(filled === undefined ? "? unknown" : "━".repeat(filled)) as TextChunk,
+          ]]);
+        });
+        renderer.requestRender();
+      });
+    }
     const nextSelectedRowId = rowBoxes[state.selected]?.box.id;
     if (identitiesChanged || nextSelectedRowId !== selectedRowId) revealSelectedRowAfterLayout();
     selectedRowId = nextSelectedRowId;
@@ -554,7 +613,8 @@ export async function createInteractiveApp(
         fg(theme.dim)("EVIDENCE ") as TextChunk,
         plain(`observed  invokes ${evidence.evidence.count.invokes}  loads ${evidence.evidence.count.loads}  reads ${evidence.evidence.count.reads}`),
       ]);
-      rows.push([fg(theme.dim)("LAST SEEN ") as TextChunk, plain(new Date(evidence.evidence.lastSeenAt).toLocaleString())]);
+      const lastUsed = new Date(evidence.evidence.lastSeenAt);
+      rows.push([fg(theme.dim)("LAST USED ") as TextChunk, plain(Number.isNaN(lastUsed.valueOf()) ? "unknown" : lastUsed.toLocaleString())]);
     } else if (evidence?.evidence.kind === "not-observed") {
       rows.push([fg(theme.dim)("EVIDENCE ") as TextChunk, plain("not observed in this scope and window")]);
     } else {
@@ -767,6 +827,10 @@ export async function createInteractiveApp(
       [plain("  left/right focus pane   Esc back/close")], [],
       [plain("Explore")],
       [plain("  / search   Tab category   u not observed   n try next")], [],
+      [plain("Sort")],
+      [plain("  o cycle columns   v reverse   l last used newest")],
+      [plain("  1 name  2 invokes  3 loads  4 reads  5 usage  6 last used")],
+      [plain("  Bars: total observations · relative to filtered maximum")], [],
       [plain("Evidence")],
       [plain("  invokes = explicit slash requests or recognized expanded requests")],
       [plain("  loads = successful skill tool loads")],
@@ -803,7 +867,7 @@ export async function createInteractiveApp(
       ],
       [
         fg(theme.dim)(
-          `${searchLine}   ↑↓ move   Enter examples   Tab category   q quit`,
+          `${searchLine}   Sort ${sortLabel(state.sortKey)} ${state.sortDirection === "asc" ? "↑" : "↓"}   o/v/l 1-6   ↑↓ move`,
         ) as TextChunk,
       ],
       [fg(warning ? theme.warn : theme.dim)(inlineSafe(`Refreshed ${refreshed} · 15s · ${scope}${warning ? ` · WARNING: ${warning}` : state.status ? ` · ${state.status}` : ""}`)) as TextChunk],
@@ -1090,8 +1154,31 @@ export async function createInteractiveApp(
       draw();
       return;
     }
+    if (key.name === "o") {
+      const index = SORT_KEYS.indexOf(state.sortKey);
+      const next = SORT_KEYS[(index + 1) % SORT_KEYS.length];
+      if (next) setSort(next);
+      draw();
+      return;
+    }
+    if (key.name === "v") {
+      setSort(state.sortKey, state.sortDirection === "asc" ? "desc" : "asc");
+      draw();
+      return;
+    }
+    if (key.name === "l") {
+      setSort("last-used", "desc");
+      draw();
+      return;
+    }
+    const directSort = key.sequence && /^[1-6]$/.test(key.sequence) ? SORT_KEYS[Number(key.sequence) - 1] : undefined;
+    if (directSort) {
+      setSort(directSort);
+      draw();
+      return;
+    }
 
-    const page = Math.max(1, Math.floor(renderer.height / 2));
+    const page = Math.max(1, Math.floor(listScroll.height / 2));
     const inList = state.focus === "list";
     const inExamples = state.focus === "examples";
     const inReader = state.focus === "detail" || state.focus === "context";
