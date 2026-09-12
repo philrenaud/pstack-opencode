@@ -1,0 +1,1 @@
+After the explanation is complete, spawn one architectural critic per model in your configured how-critics list (defaults `claude-opus-4-8-thinking-xhigh`, `gpt-5.5-high-fast`, `grok-4.5-fast-xhigh`), all in a single message.

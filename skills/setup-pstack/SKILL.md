@@ -11,31 +11,31 @@ pstack routes models through named OpenCode agents rather than per-call model pa
 
 | Agent | Role | Used by |
 | --- | --- | --- |
-| `poteto-agent` | general delegate, GPT through Copilot | playbook delegates, plan exploration |
+| `poteto-agent` | general delegate, strongest model | playbook delegates, plan exploration |
 | `poteto-coder` | fast, precisely specified mechanical implementation | feature and refactoring delegates |
 | `poteto-claude` | judgment, prose, difficult code, synthesis | how explainer, why synthesizer, reflect judgment/divergent, bug-fix/perf/hillclimb, panels |
-| `poteto-gpt` | second panelist family | interrogate/arena/architect panels, reflect tooling |
-| `poteto-grok` | fast exploration plus third panelist family | how explorer, why investigators, swarm, panels |
+| `poteto-gpt` | second panel seat | interrogate/arena/architect panels, reflect tooling |
+| `poteto-grok` | fast exploration plus third panel seat | how explorer, why investigators, swarm, panels |
 | `poteto-opus` | fourth panel seat | interrogate/arena/architect panels |
-| `comment-sicko` | comment cleanup, Claude through Copilot | no-comments |
+| `comment-sicko` | comment cleanup | no-comments |
 
 ## Steps
 
 ### 1. Detect available models
 
-Run `opencode models github-copilot`. This port uses GitHub Copilot for every role, including general delegates, comment cleanup, and the `/poteto-mode` command. Never write a model ID you have not seen in the detected list. Model IDs are `provider/model-id`, such as `github-copilot/claude-opus-5`. Change providers only when the user explicitly requests it.
+Run `opencode models <provider>` for each provider currently pinned in `agents/` (`opencode models anthropic` by default; `opencode models` with no argument lists every configured provider). Never write a model ID you have not seen in the detected list. Model IDs are `provider/model-id`, such as `anthropic/claude-opus-5`. Change providers only when the user explicitly requests it, and only to a provider whose models `opencode models` lists.
 
 ### 2. Load current state
 
-Read every file in this repo's `agents/` directory and `commands/poteto-mode.md`. Collect each `model:` frontmatter line. A missing line inherits the caller's model and does not guarantee the Copilot-only policy.
+Read every file in this repo's `agents/` directory and `commands/poteto-mode.md`. Collect each `model:` frontmatter line. A missing line inherits the caller's model and does not guarantee the pinned-provider policy.
 
 ### 3. Map and confirm
 
-Show every role with its current model, marking missing pins and unavailable models as needing a choice. If the user already specified the provider or models, apply that choice directly. Otherwise use `question` to offer detected Copilot models. Keep at least three model families across the panel. The defaults use Sonnet and Opus from Anthropic, GPT from OpenAI, and Gemini from Google. `poteto-grok` is the existing routing name for the Gemini seat; agent names do not determine their model family.
+Show every role with its current model, marking missing pins and unavailable models as needing a choice. If the user already specified the provider or models, apply that choice directly. Otherwise use `question` to offer detected models. Keep at least three distinct models across the panel so independent review is not the same model under different names. With a single provider, distinct tiers count: the defaults use Fable 5.1 for `poteto-agent`, Opus 5 for `poteto-claude` and `poteto-opus`, Sonnet 5 for `poteto-gpt`, `poteto-coder`, and `comment-sicko`, and Haiku 4.5 for `poteto-grok`. `poteto-gpt` and `poteto-grok` are existing routing names; agent names do not determine their model.
 
 ### 4. Validate and write
 
-Every model ID written must appear in the detected list and start with `github-copilot/`. Edit only the `model:` frontmatter lines in agents and the command. Leave prompts and permissions alone. Re-runs stay idempotent. If the user explicitly requests `inherit-parent` or `auto`, explain that inheritance no longer guarantees Copilot-only routing, then remove the pin. Never write those aliases as model IDs.
+Every model ID written must appear in the detected list for its provider and carry a `provider/` prefix. Edit only the `model:` frontmatter lines in agents and the command. Leave prompts and permissions alone. Re-runs stay idempotent. If the user explicitly requests `inherit-parent` or `auto`, explain that inheritance no longer guarantees pinned-provider routing, then remove the pin. Never write those aliases as model IDs.
 
 ### 5. Confirm
 

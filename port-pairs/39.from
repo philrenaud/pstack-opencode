@@ -1,0 +1,1 @@
+4. Verify each component against its baseline via image diff on the matching surface via the control skill. A nonzero diff is a fail; investigate the pixel delta, don't wave it through. `/loop` per component until the diff is zero.

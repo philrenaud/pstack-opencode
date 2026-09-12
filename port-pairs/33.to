@@ -1,0 +1,1 @@
+Locate recent sessions before fanning out: `opencode session list` finds this project's sessions, `opencode export <sessionID>` dumps one as JSON. Stay within the current project's sessions. Other projects' sessions are private chats from unrelated work.

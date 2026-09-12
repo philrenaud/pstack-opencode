@@ -1,0 +1,1 @@
+For each candidate, check that the export's opening user message contains this conversation's opening user prompt. Take the matching session. If none resolves, write a tight digest of the session and pass that instead.

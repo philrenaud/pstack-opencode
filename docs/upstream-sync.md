@@ -21,7 +21,7 @@ The resulting tree contains 46 skills, 23 principles, 23 playbooks, and seven ag
 
 ## OpenCode adaptations
 
-Models live in named agents. Following the user's provider preference, every agent and the `/poteto-mode` command now pins an available GitHub Copilot model. The panel uses Sonnet 5, GPT 5.6 Sol, Gemini 3.8 Flash, and Opus 5. General delegates use GPT 6 Astra, code delegates use GPT 5.3 Codex, and comment cleanup uses Sonnet 5. The `poteto-grok` routing name now points to Gemini because Copilot's detected catalog does not include Grok.
+Models live in named agents. Every agent and the `/poteto-mode` command pins an available Anthropic model. The panel uses Opus 5 (`poteto-claude`, `poteto-opus`), Sonnet 5 (`poteto-gpt`), and Haiku 4.5 (`poteto-grok`). General delegates use Fable 5.1, code delegates and comment cleanup use Sonnet 5. The `poteto-gpt` and `poteto-grok` routing names are kept for compatibility with the skills that reference them; the routing was originally GitHub Copilot with GPT and Gemini seats.
 
 Workers use exclusive local worktrees with separate runtime ports and data. They receive no unsupported Task arguments. Review-only work is specified in the prompt. Transcript consumers use project-scoped `opencode session list` and `opencode export`.
 

@@ -1,0 +1,1 @@
+- watching the PR after opening it: `gh pr checks <number> --watch`, then triage comments.

@@ -1,0 +1,1 @@
+Session history comes from the CLI: `opencode session list` finds recent sessions in this project, `opencode export <sessionID>` dumps one as JSON. Stay within the current project's sessions.

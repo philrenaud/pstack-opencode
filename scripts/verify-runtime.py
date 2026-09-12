@@ -22,13 +22,6 @@ def run(*args, env=None, cwd=root, expected=0):
     return text
 
 
-available_models = set(run("opencode", "models", "github-copilot").splitlines())
-for directory in ("agents", "commands"):
-    for path in (root / directory).glob("*.md"):
-        model = re.search(r"^model: (.+)$", path.read_text(), re.M)
-        assert model and model[1].startswith("github-copilot/") and model[1] in available_models, f"unavailable Copilot model in {path}"
-print("PASS every agent and command pins an available GitHub Copilot model")
-
 with tempfile.TemporaryDirectory(prefix="pstack-verify-") as temporary:
     base = Path(temporary)
     env = {**os.environ, "XDG_CONFIG_HOME": str(base / "config")}
@@ -133,3 +126,16 @@ with tempfile.TemporaryDirectory(prefix="pstack-verify-") as temporary:
     audit = run("bash", str(tools / "worktree-audit.sh"), str(repo), env=audit_env)
     assert "\treview\t" in audit and "\tsafe\t" not in audit, audit
     print("PASS worktree audit handles spaced worktree and transcript paths, untracked work, and closed-but-unmerged branches")
+
+pins = {}
+for directory in ("agents", "commands"):
+    for path in (root / directory).glob("*.md"):
+        model = re.search(r"^model: (.+)$", path.read_text(), re.M)
+        assert model and "/" in model[1], f"missing provider/model pin in {path}"
+        pins[path] = model[1]
+available_models = set()
+for provider in sorted({model.split("/", 1)[0] for model in pins.values()}):
+    available_models.update(run("opencode", "models", provider).splitlines())
+unavailable = {path.name: model for path, model in pins.items() if model not in available_models}
+assert not unavailable, f"pinned models not listed by opencode: {unavailable}"
+print(f"PASS every agent and command pins a model available from its provider ({len(pins)} pins)")

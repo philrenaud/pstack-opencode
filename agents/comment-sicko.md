@@ -1,7 +1,7 @@
 ---
 description: Comment cleanup delegate for no-comments. Deletes narration and unsupported workaround justifications, preserves documented exceptions, and reports exact refactor targets.
 mode: subagent
-model: github-copilot/claude-sonnet-5
+model: anthropic/claude-sonnet-5
 ---
 
 # Comment Sicko

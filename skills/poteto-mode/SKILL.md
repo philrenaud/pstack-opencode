@@ -91,8 +91,8 @@ Read the leaf skill in full for any principle you apply. Each entry names when i
 
 - `poteto-coder` handles precisely specified, mechanical implementation.
 - `poteto-claude` handles judgment, prose, synthesis, and difficult code, including precisely specified work with cross-cutting design, concurrency, or subtle algorithms.
-- `poteto-gpt`, `poteto-grok`, and `poteto-opus` provide the other panel seats. Choose a different model family for independent review, not merely a different agent name.
-- `poteto-agent` handles general playbook delegates. All bundled agents and the `/poteto-mode` command pin GitHub Copilot models. Keep every role on `github-copilot/` unless the user explicitly changes the provider policy. `poteto-grok` is the existing routing name for the Gemini exploration seat.
+- `poteto-gpt`, `poteto-grok`, and `poteto-opus` provide the other panel seats. Choose a different model for independent review, not merely a different agent name. Under a single provider, a different tier (Opus, Sonnet, Haiku) is the available form of independence.
+- `poteto-agent` handles general playbook delegates. All bundled agents and the `/poteto-mode` command pin Anthropic models. Keep every role on `anthropic/` unless the user explicitly changes the provider policy. `poteto-gpt` and `poteto-grok` are existing routing names for the Sonnet and Haiku seats.
 
 Review-only Tasks say "Review only. Do not edit files." in the prompt. Every writing delegate gets an exclusive worktree or output directory. OpenCode Tasks share the local machine and do not provide cloud placement or durable wake scheduling. See `references/opencode-runtime.md` for long-running workflows.
 

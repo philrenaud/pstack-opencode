@@ -1,0 +1,2 @@
+- `subagent_type`: one panelist agent (`poteto-claude`, `poteto-gpt`, or `poteto-grok`). Model choices are configured per agent in this repo's `agents/` directory.
+- the prompt includes: review only, do not edit files

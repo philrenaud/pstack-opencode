@@ -1,0 +1,1 @@
+A subagent that opens a PR runs `interrogate` and the unslop pass over the diff, returns the URL, and does NOT watch the PR. Return to the parent.

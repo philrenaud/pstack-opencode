@@ -1,0 +1,5 @@
+**Defaults for every `Task` call.** Spawn independent Tasks in a single message so they run in parallel. Pass file pointers, not inlined context. OpenCode routes models through named agents rather than a per-call `model:` parameter; pick the agent for the role (agents live in the pstack repo's `agents/` directory and are configurable via `/setup-pstack`):
+
+- `poteto-coder` for precisely specified implementation work (fast code model).
+- `poteto-claude`, `poteto-gpt`, `poteto-grok` for judgment, prose, and multi-model panels (a second opinion is the same prompt against a different model family).
+- `poteto-agent` for everything else; it inherits your model, so the hardest changes (cross-cutting design, gnarly concurrency, subtle algorithms) and vague intents stay with the strongest judgment model. Trivial mechanical edits go to `poteto-coder`.

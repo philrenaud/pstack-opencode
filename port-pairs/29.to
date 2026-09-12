@@ -1,0 +1,2 @@
+- `subagent_type`: `poteto-claude`
+- The synthesizer's quality check spot-verifies citations, which can require MCP access.

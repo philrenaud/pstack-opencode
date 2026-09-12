@@ -1,0 +1,1 @@
+Launch one reviewer per panelist agent (defaults `poteto-claude`, `poteto-gpt`, `poteto-grok`; models are pinned in the pstack repo's `agents/` directory), all in a single message so they run in parallel.

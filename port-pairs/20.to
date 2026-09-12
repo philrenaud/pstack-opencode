@@ -1,0 +1,3 @@
+| Judgment | `poteto-claude` | `references/judgment-reviewer.md` |
+| Tooling | `poteto-grok` | `references/tooling-reviewer.md` |
+| Divergent | `poteto-claude` | `references/divergent-reviewer.md` |

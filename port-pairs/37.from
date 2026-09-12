@@ -1,0 +1,3 @@
+- `subagent_type`: `generalPurpose`
+- `model`: one model from the configured how-critics list. These are minimum reasoning levels. The lead should escalate any model when the architecture warrants deeper analysis.
+- `readonly`: `true`

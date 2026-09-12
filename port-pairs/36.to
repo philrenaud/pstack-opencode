@@ -1,0 +1,1 @@
+3. Plan the fix from the trace. If it crosses a function boundary, `architect` first. Delegate implementation to the `poteto-coder` subagent; review the diff. Capture a post-fix trace.

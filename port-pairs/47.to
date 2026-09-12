@@ -1,0 +1,1 @@
+Mining misses intent that hasn't come up yet. Use the `question` tool (structured multi-choice) rather than asking the user to type from scratch. Lower cognitive load, higher hit rate.

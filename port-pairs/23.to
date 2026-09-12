@@ -1,0 +1,1 @@
+If a panelist agent is rejected as unknown when you try to spawn it, check the valid subagent types in the Task tool's error message, fall back to `general` for that seat so the review still runs, and flag that the pstack agents are not installed (see the repo README's install section). Do not block the review on the missing agent.

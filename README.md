@@ -51,17 +51,17 @@ Cursor passes a `model:` parameter per subagent call. OpenCode pins models on na
 
 | Agent | Role | Model |
 | --- | --- | --- |
-| `poteto-agent` | general delegate, reads poteto-mode in full first | `github-copilot/gpt-6-astra` |
-| `poteto-coder` | mechanical implementation | `github-copilot/gpt-5.3-codex` |
-| `poteto-claude` | judgment, difficult code, prose, synthesis | `github-copilot/claude-sonnet-5` |
-| `poteto-gpt` | second panel family | `github-copilot/gpt-5.6-sol` |
-| `poteto-grok` | exploration, swarm, Gemini panel seat | `github-copilot/gemini-3.8-flash` |
-| `poteto-opus` | fourth panel seat | `github-copilot/claude-opus-5` |
-| `comment-sicko` | comment cleanup | `github-copilot/claude-sonnet-5` |
+| `poteto-agent` | general delegate, reads poteto-mode in full first | `anthropic/claude-fable-5-1` |
+| `poteto-coder` | mechanical implementation | `anthropic/claude-sonnet-5` |
+| `poteto-claude` | judgment, difficult code, prose, synthesis | `anthropic/claude-opus-5` |
+| `poteto-gpt` | second panel seat | `anthropic/claude-sonnet-5` |
+| `poteto-grok` | exploration, swarm, fast panel seat | `anthropic/claude-haiku-4-5` |
+| `poteto-opus` | fourth panel seat | `anthropic/claude-opus-5` |
+| `comment-sicko` | comment cleanup | `anthropic/claude-sonnet-5` |
 
-Every pstack agent explicitly uses GitHub Copilot. The `/poteto-mode` command also pins `github-copilot/gpt-6-astra`. The four panel seats span Claude, GPT, and Gemini. `poteto-grok` keeps its existing routing name but runs Gemini because the detected Copilot catalog has no Grok model. All pins were confirmed by `opencode models github-copilot`.
+Every pstack agent and the `/poteto-mode` command explicitly pins an Anthropic model. The four panel seats span Opus, Sonnet, and Haiku; with a single provider, independent review comes from different model tiers rather than different vendors. `poteto-gpt` and `poteto-grok` keep their existing routing names. All pins were confirmed by `opencode models anthropic`.
 
-Run `/setup-pstack` to choose other Copilot models. Changing providers requires an explicit request. Removing a model pin with `inherit-parent` or `auto` allows the caller's provider to determine routing. Skills loaded directly use the current chat model; they cannot change its provider. Use a Copilot chat or the `/poteto-mode` command for Copilot-only execution.
+Run `/setup-pstack` to choose other models. It reads the provider from each pin, so any provider `opencode models <provider>` can list is valid. Removing a model pin with `inherit-parent` or `auto` allows the caller's provider to determine routing. Skills loaded directly use the current chat model; they cannot change its provider. Use the `/poteto-mode` command to force the pinned model.
 
 ## What changed from upstream
 

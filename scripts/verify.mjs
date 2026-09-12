@@ -38,7 +38,7 @@ for (const path of files) {
         if (data.mode !== "subagent") fail("agent must be a subagent");
         if (data.model && !data.model.includes("/")) fail("model needs provider prefix");
       }
-      if (/^(agents|commands)\//.test(label) && (typeof data.model !== "string" || !data.model.startsWith("github-copilot/"))) fail("pstack roles must explicitly pin a GitHub Copilot model");
+      if (/^(agents|commands)\//.test(label) && (typeof data.model !== "string" || !/^[a-z0-9-]+\/.+/.test(data.model))) fail("pstack roles must explicitly pin a provider/model");
     } catch (error) {
       fail(`frontmatter: ${error.message}`);
     }
