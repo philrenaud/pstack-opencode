@@ -32,15 +32,27 @@ with tempfile.TemporaryDirectory(prefix="pstack-verify-") as temporary:
     assert config.read_bytes() == initial, "second install changed config"
     assert json.loads(initial)["skills"]["paths"] == [str(root / "skills")]
     for directory in ("agents", "commands"):
-        for source in (root / directory).glob("*.md"):
+        for source in (root / "opencode" / directory).glob("*.md"):
             assert (config.parent / directory / source.name).resolve() == source
     print("PASS fresh and repeated install; all agent and command symlinks resolve")
+
+    claude_env = {**os.environ, "CLAUDE_CONFIG_DIR": str(base / "claude")}
+    for _ in range(2):
+        run("bash", str(root / "install.sh"), "claude", env=claude_env)
+    for source in (root / "skills").iterdir():
+        if source.is_dir():
+            link = base / "claude/skills" / source.name
+            assert link.is_symlink() and link.resolve() == source.resolve(), f"skill link missing: {source.name}"
+            assert not (link / source.name).exists(), f"repeated install nested a link inside {source.name}"
+    for source in (root / "claude/agents").glob("*.md"):
+        assert (base / "claude/agents" / source.name).resolve() == source
+    assert not (base / "claude/commands").exists(), "Claude Code install must not link OpenCode commands"
+    print("PASS repeated Claude Code install links every skill directory and agent without nesting")
 
     moved = base / "renamed clone"
     moved.mkdir()
     shutil.copy2(root / "install.sh", moved / "install.sh")
-    for directory in ("agents", "commands"):
-        shutil.copytree(root / directory, moved / directory)
+    shutil.copytree(root / "opencode", moved / "opencode")
     message = run("bash", str(moved / "install.sh"), env=env)
     assert "ACTION NEEDED" in message and config.read_bytes() == initial
     moved_config = {"skills": {"paths": [str(moved / "skills")]}}
@@ -65,7 +77,7 @@ with tempfile.TemporaryDirectory(prefix="pstack-verify-") as temporary:
     actual = {entry["name"] for entry in discovered}
     assert expected <= actual, f"skills missing: {expected - actual}"
     listed = run("opencode", "agent", "list", env=env, cwd=base)
-    for path in (root / "agents").glob("*.md"):
+    for path in (root / "opencode/agents").glob("*.md"):
         assert path.stem in listed, f"agent missing: {path.stem}"
     print(f"PASS OpenCode loads {len(expected)} pstack skills and all agents")
 
@@ -109,13 +121,13 @@ with tempfile.TemporaryDirectory(prefix="pstack-verify-") as temporary:
     gh = fake_bin / "gh"
     gh.write_text('#!/bin/sh\nprintf \'[{"number":1,"state":"CLOSED","headRefName":"worker"}]\\n\'\n')
     gh.chmod(0o755)
-    audit_env = {**os.environ, "PATH": f'{fake_bin}:{os.environ["PATH"]}', "OPENCODE_TRANSCRIPT_DIR": ""}
+    audit_env = {**os.environ, "PATH": f'{fake_bin}:{os.environ["PATH"]}', "PSTACK_TRANSCRIPT_DIR": ""}
     audit = run("bash", str(tools / "worktree-audit.sh"), str(repo), env=audit_env)
     assert str(worktree) in audit and "\tverify-session\t" in audit and "\tsafe\t" not in audit
     exports = base / "session exports"
     exports.mkdir()
     (exports / "run 1.json").write_text(json.dumps({"directory": str(worktree.resolve())}))
-    transcript_env = {**audit_env, "OPENCODE_TRANSCRIPT_DIR": str(exports)}
+    transcript_env = {**audit_env, "PSTACK_TRANSCRIPT_DIR": str(exports)}
     audit = run("bash", str(tools / "worktree-audit.sh"), str(repo), env=transcript_env)
     assert "\tverify-recent-chat\t" in audit, audit
     (worktree / "untracked.txt").write_text("keep this work")
@@ -128,7 +140,7 @@ with tempfile.TemporaryDirectory(prefix="pstack-verify-") as temporary:
     print("PASS worktree audit handles spaced worktree and transcript paths, untracked work, and closed-but-unmerged branches")
 
 pins = {}
-for directory in ("agents", "commands"):
+for directory in ("opencode/agents", "opencode/commands"):
     for path in (root / directory).glob("*.md"):
         model = re.search(r"^model: (.+)$", path.read_text(), re.M)
         assert model and "/" in model[1], f"missing provider/model pin in {path}"

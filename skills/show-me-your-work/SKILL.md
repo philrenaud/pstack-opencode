@@ -52,7 +52,7 @@ Commit it only when the work is ambitious enough that a reviewer needs the trail
 
 ## Audit the log against the transcript
 
-At the end of the run, before handing back, check the log told the truth. Locate this project's session with `opencode session list` and read `opencode export <sessionID>`. Confirm its project and opening prompt before using it. Walk the log against what actually happened:
+At the end of the run, before handing back, check the log told the truth. Locate this project's session transcript per the runtime reference (`skills/poteto-mode/references/runtime.md`). Confirm its project and opening prompt before using it. Walk the log against what actually happened:
 
 - Every row maps to a real action. Cut invented or aspirational entries.
 - Each row's evidence resolves and shows what the row claims.

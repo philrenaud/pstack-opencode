@@ -1,6 +1,6 @@
 ### Babysit
 
-**You own the merge frontier. Declare a mode, clear one PR at a time, stop where the human's call begins.** A request to land or ship is `playbooks/shipping.md`, which begins where this playbook ends. Read `../references/opencode-runtime.md` for tool paths and bounded polling.
+**You own the merge frontier. Declare a mode, clear one PR at a time, stop where the human's call begins.** A request to land or ship is `playbooks/shipping.md`, which begins where this playbook ends. Read `../references/runtime.md` for tool paths and bounded polling.
 
 Babysitting starts when the user asks for it, which is normally once a phase or a whole stack is built, not when a PR opens. Finish the stack, get it green here, then land it through Shipping.
 

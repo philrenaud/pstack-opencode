@@ -4,7 +4,7 @@
 
 Ceremony must scale with the program. On cheap near-identical units, collapse it as each section directs.
 
-Read `../references/opencode-runtime.md` before starting. This port uses local worktrees and explicit state paths. `orch frontier set --repo` requires Graphite. If it is unavailable, use Autopilot-full or Autopilot-stack with the GitHub workflows instead.
+Read `../references/runtime.md` before starting. This port uses local worktrees and explicit state paths. `orch frontier set --repo` requires Graphite. If it is unavailable, use Autopilot-full or Autopilot-stack with the GitHub workflows instead.
 
 Three rules carry the rest.
 
@@ -14,15 +14,15 @@ Three rules carry the rest.
 
 #### Roles and placement
 
-- **Coordinator (this chat).** Local. Frames, authors briefs, drains the inbox, owns the human report, makes judgment calls. It never authors or edits code. Conflicted merges, restacks, and code changes are always tasks. Mechanically landing a verified unit (fast-forward or clean cherry-pick of a worker's commit, then push) is bookkeeping the coordinator may do itself on repos where local git is cheap. Queueing finished work behind an idle stacker is how a deadline harvests nothing. The loop is agentic end to end. Agents are spawned, resumed, and drained only through the Task tool. State reads and writes go through `scripts/orch/orch.ts` at drain points, one command in and one line out. The CLI never spawns, waits, or wakes anything.
-- **Sub-coordinator.** One per track only when the program exceeds what one coordinator can manage. Owns its track's units and boards, authors briefs, and spawns workers only when the active Task permissions allow nesting. Otherwise the coordinator spawns the workers directly. Rolls up aggregates at wave boundaries. Never forwards raw child reports. Cap in-flight children at what one review pass can process, roughly ten. Refill as results become available through the active tool.
-- **Worker / verifier.** Use named OpenCode agents in exclusive local worktrees. Give each runtime its own ports and data. Briefs include the store path and relevant reports. Prefer fewer, broader workers. One writer per worktree or branch (principle-separate-before-serializing-shared-state). Run a unit's verifier on a different model family from its worker.
+- **Coordinator (this chat).** Local. Frames, authors briefs, drains the inbox, owns the human report, makes judgment calls. It never authors or edits code. Conflicted merges, restacks, and code changes are always tasks. Mechanically landing a verified unit (fast-forward or clean cherry-pick of a worker's commit, then push) is bookkeeping the coordinator may do itself on repos where local git is cheap. Queueing finished work behind an idle stacker is how a deadline harvests nothing. The loop is agentic end to end. Agents are spawned, resumed, and drained only through the subagent tool. State reads and writes go through `scripts/orch/orch.ts` at drain points, one command in and one line out. The CLI never spawns, waits, or wakes anything.
+- **Sub-coordinator.** One per track only when the program exceeds what one coordinator can manage. Owns its track's units and boards, authors briefs, and spawns workers only when the active subagent permissions allow nesting. Otherwise the coordinator spawns the workers directly. Rolls up aggregates at wave boundaries. Never forwards raw child reports. Cap in-flight children at what one review pass can process, roughly ten. Refill as results become available through the active tool.
+- **Worker / verifier.** Use named agents in exclusive local worktrees. Give each runtime its own ports and data. Briefs include the store path and relevant reports. Prefer fewer, broader workers. One writer per worktree or branch (principle-separate-before-serializing-shared-state). Run a unit's verifier on a different model family from its worker.
 
 Depth stays at coordinator, track, worker. Author the track decomposition per project (build, landing, and verification are common cuts, not a required shape). Hard-coded swarm trees were tried and parked as too rigid.
 
 #### Store layout
 
-Create `.opencode/state/orchestrate/<project-slug>/` in the target project and set `ORCH_STORE` to its absolute path, or pass `--store` on every call. Every file has exactly one writer. Owners publish facts, readers aggregate at read time. Use `bun <poteto-mode-skill-dir>/scripts/orch/orch.ts` for bookkeeping, written below as `orch`, while its canonical plain TSV and JSON stay readable without the CLI.
+Create `.pstack/state/orchestrate/<project-slug>/` in the target project and set `ORCH_STORE` to its absolute path, or pass `--store` on every call. Every file has exactly one writer. Owners publish facts, readers aggregate at read time. Use `bun <poteto-mode-skill-dir>/scripts/orch/orch.ts` for bookkeeping, written below as `orch`, while its canonical plain TSV and JSON stay readable without the CLI.
 
 - `preferences.md` is the standing-orders register: numbered lines, one constraint each (model policy, stack shape and count, verification bar, forbidden paths, escalation policy). Paste it verbatim into every spawn and every resume. Directives decay across resumes, and each dropped one costs a human turn. When you catch yourself restating an instruction, append the line before you act (principle-encode-lessons-in-structure).
 - `overview.md` is the durable PR and issue DB. Append. Never rewrite wholesale per event.
@@ -100,7 +100,7 @@ A unit is not done until its output is externalized the moment it lands, never b
 - A zombie that returns hours late reconciles against the current frontier and ledger before anything is accepted. Salvage unique findings through a fresh unit, never a blind merge.
 - When continued spawning would produce garbage tree-wide (bad upstream output, broken acceptance, dead infra), write a stop line at the top of the standing orders, let in-flight work finish, fix the cause, clear it.
 - Bound your own infra retries the same way you bound a child's. After a few consecutive tool aborts, stop retrying. Write a terminal handoff to durable state (what is done, where it lives, the exact command to resume) and end the run.
-- After an OpenCode restart, inspect processes and persisted state rather than assuming workers survived. Re-read the standing orders and `units.tsv`, recompute the frontier, reconcile work by PR and branch, and spawn fresh workers from stored briefs plus current state. `orch` replaces a lock whose holder pid is gone.
+- After a host restart, inspect processes and persisted state rather than assuming workers survived. Re-read the standing orders and `units.tsv`, recompute the frontier, reconcile work by PR and branch, and spawn fresh workers from stored briefs plus current state. `orch` replaces a lock whose holder pid is gone.
 
 #### Escalation
 

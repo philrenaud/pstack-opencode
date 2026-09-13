@@ -32,7 +32,7 @@ Write one clear paragraph. If you're unsure about the intent, ask the user befor
 
 ## Step 3, Spawn Reviewers
 
-Launch all reviewers in a single message using the Task tool. Default to the four agents below. If the caller names a panel, use one Task per named agent and adjust the reviewer labels to its size. `/setup-pstack` configures each agent's model.
+Launch all reviewers in a single message using the subagent tool. Default to the four agents below. If the caller names a panel, use one subagent per named agent and adjust the reviewer labels to its size. `/setup-pstack` configures each agent's model.
 
 | Reviewer | `subagent_type` |
 |----------|---------------|
@@ -43,7 +43,7 @@ Launch all reviewers in a single message using the Task tool. Default to the fou
 
 For each reviewer, use its `subagent_type` and include "Review only. Do not edit files." in the prompt.
 
-If an agent's model is unavailable, inspect `opencode models` and use `/setup-pstack` to select an available equivalent. Agent changes require an OpenCode restart. Continue with available reviewers and report the missing seat rather than claiming a full panel.
+If an agent's model is unavailable, use `/setup-pstack` to select an available equivalent from the host's model list. Agent changes require a host restart. Continue with available reviewers and report the missing seat rather than claiming a full panel.
 
 Read `references/reviewer-prompt.md` and fill in the template with:
 1. The stated intent

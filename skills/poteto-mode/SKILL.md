@@ -7,6 +7,8 @@ metadata:
 
 # Poteto mode
 
+These skills run on OpenCode and Claude Code from one tree. Skill text names roles (the subagent tool, asking the user, the transcript, the skills directory); `references/runtime.md` maps each role to your host's tool and paths. Read it once per session.
+
 ## Non-negotiables
 
 The Principles section below grounds every trigger. In your reply, name each principle that shaped a decision and the specific choice it changed. Cite only principles whose leaf SKILL.md you read this session.
@@ -14,13 +16,13 @@ The Principles section below grounds every trigger. In your reply, name each pri
 Remaining triggers:
 
 - Nontrivial change, architecture decision, or "are we sure?" → the **how** skill.
-- About to `question` on a "which approach", "how should I", or "what should this do" fork → classify it before you ask. If the answer is a fact you could observe by running something (behavior, timing, layout, output, perf, even whether an eval separates), it is not the human's to answer. Sketch it via the Prototype playbook (`playbooks/prototype.md`) and let the result decide. If the task is a read-only Investigation whose deliverable is a cited answer, stay in it and answer from the evidence rather than building a sketch. Reserve the question for a genuine product or preference call no experiment can settle.
+- About to ask the user about a "which approach", "how should I", or "what should this do" fork → classify it before you ask. If the answer is a fact you could observe by running something (behavior, timing, layout, output, perf, even whether an eval separates), it is not the human's to answer. Sketch it via the Prototype playbook (`playbooks/prototype.md`) and let the result decide. If the task is a read-only Investigation whose deliverable is a cited answer, stay in it and answer from the evidence rather than building a sketch. Reserve the question for a genuine product or preference call no experiment can settle.
 - Any code → name the data shape first, and choose its organizing structure per **principle-model-the-domain**.
 - Code crossing a function boundary → the **architect** skill, parallel design exploration before implementing.
 - Parallel fan-out → the **swarm** skill for coverage matrices, races, gauntlets, and exploration partitions. Use **arena** for design or code bakeoffs with base selection and grafting.
 - Contested design → the **interrogate** skill (multi-model adversarial) before shipping.
 - Nontrivial multi-step → write the throughput checkpoint (Feature step 3).
-- Any prose surface → the **unslop** skill. Your reply is a prose surface. Write it per **Writing the reply**. Agent-facing prose also follows the authoring-a-skill playbook and the OpenCode skill format (https://opencode.ai/docs/skills).
+- Any prose surface → the **unslop** skill. Your reply is a prose surface. Write it per **Writing the reply**. Agent-facing prose also follows the authoring-a-skill playbook and the host's skill format (see `references/runtime.md`).
 - Docs, RFCs, readmes, PR descriptions, or commit messages → the **technical-writing** skill (`/technical-writing`).
 - Before commit → the **unslop** rules applied to the diff.
 - Before review → the **no-comments** skill (`/no-comments`).
@@ -87,14 +89,14 @@ Read the leaf skill in full for any principle you apply. Each entry names when i
 
 **Use the agent named by the playbook or workflow skill.** When no agent is named, use `subagent_type: "poteto-agent"` for general delegates and ad-hoc helpers. `poteto-coder` handles mechanical implementation when the playbook names it. Never override a routed skill's panel or exploration agent with `poteto-agent`.
 
-**Defaults for every `Task` call.** Spawn independent Tasks in one message. Pass file pointers, not inlined context. OpenCode selects models through named agents configured by `/setup-pstack` in this repo's `agents/` directory. Use only fields in the active Task schema.
+**Defaults for every subagent call.** Spawn independent subagents in one message. Pass file pointers, not inlined context. Both hosts select models through the named agents configured by `/setup-pstack` in this repo's `opencode/agents/` directory (rendered into `claude/agents/`). Use only fields in the active subagent tool's schema; `references/runtime.md` names the tool on each host.
 
 - `poteto-coder` handles precisely specified, mechanical implementation.
 - `poteto-claude` handles judgment, prose, synthesis, and difficult code, including precisely specified work with cross-cutting design, concurrency, or subtle algorithms.
 - `poteto-gpt`, `poteto-grok`, and `poteto-opus` provide the other panel seats. Choose a different model for independent review, not merely a different agent name. Under a single provider, a different tier (Opus, Sonnet, Haiku) is the available form of independence.
 - `poteto-agent` handles general playbook delegates. All bundled agents and the `/poteto-mode` command pin Anthropic models. Keep every role on `anthropic/` unless the user explicitly changes the provider policy. `poteto-gpt` and `poteto-grok` are existing routing names for the Sonnet and Haiku seats.
 
-Review-only Tasks say "Review only. Do not edit files." in the prompt. Every writing delegate gets an exclusive worktree or output directory. OpenCode Tasks share the local machine and do not provide cloud placement or durable wake scheduling. See `references/opencode-runtime.md` for long-running workflows.
+Review-only subagents say "Review only. Do not edit files." in the prompt. Every writing delegate gets an exclusive worktree or output directory. Subagents share the local machine and do not provide cloud placement. See `references/runtime.md` for long-running workflows and for what each host offers as a scheduler.
 
 You own every subagent's work. Review the diff and write your own summary, don't pass through what it said. Interrupt-chained resumes silently drop directives, so fire a fresh subagent with consolidated scope rather than trusting a "done" summary. A second opinion is the same prompt against a different model. Agreement is high-signal.
 
@@ -141,7 +143,7 @@ A large or cross-cutting effort (a migration across many call sites, an ambitiou
 - **Autopilot-full.** A queue of independent PRs run to merged with full autonomy. One owner per PR carries build through merge, and the root swarm-verifies each merge-ready head before its owner merges ("autopilot this queue", "full autopilot", one-owner-per-PR programs). `playbooks/autopilot-full.md`.
 - **Autopilot-stack.** A queue of changes built and verified with full autonomy, delivered as one linear reviewed base-branch stack the operator lands herself ("autopilot-stack", "stack them, don't ship", "build the stack, I'll land it"). `playbooks/autopilot-stack.md`.
 - **Session pickup.** Resuming or taking over a prior agent's in-flight work from a transcript, cloud-agent URL, or pushed branch. `playbooks/session-pickup.md`.
-- **Pause safely.** Suspending in-flight work cleanly so it can be resumed, on an explicit pause, going offline, an OpenCode restart, or imminent context compaction. The complement to Session pickup. Full steps: `playbooks/pause-safely.md`.
+- **Pause safely.** Suspending in-flight work cleanly so it can be resumed, on an explicit pause, going offline, a host restart, or imminent context compaction. The complement to Session pickup. Full steps: `playbooks/pause-safely.md`.
 - **Multi-phase or multi-PR plan.** Work that spans phases or stacked PRs. `playbooks/multi-phase-plan.md`.
 - **Worktree and simulator cleanup.** Reclaiming local disk by pruning merged or abandoned git worktrees and stale iOS simulators ("what's using my disk", "clean up worktrees", "prune safe-to-prune worktrees", "free up space", "delete old simulators"). `playbooks/worktree-cleanup.md`.
 - **Opening a PR.** Invoked at the end of every other playbook. `playbooks/opening-a-pr.md`.

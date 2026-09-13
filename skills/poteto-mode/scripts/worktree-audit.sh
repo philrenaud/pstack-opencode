@@ -24,9 +24,9 @@ gh pr list --author "@me" --state all --limit 1000 \
 	--json number,state,headRefName 2>/dev/null > "$prs" || echo "[]" > "$prs"
 
 # Only search exports the caller has scoped to this project.
-transcripts="${OPENCODE_TRANSCRIPT_DIR:-}"
+transcripts="${PSTACK_TRANSCRIPT_DIR:-${OPENCODE_TRANSCRIPT_DIR:-}}"
 if [ -n "$transcripts" ] && ! command -v python3 >/dev/null 2>&1; then
-	echo "python3 is required when OPENCODE_TRANSCRIPT_DIR is set" >&2
+	echo "python3 is required when PSTACK_TRANSCRIPT_DIR is set" >&2
 	exit 1
 fi
 now=$(date +%s)
