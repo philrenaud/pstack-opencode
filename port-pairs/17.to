@@ -1,0 +1,1 @@
+   - Hand the change to the `poteto-coder` subagent with a tight scope; supervise and review the diff rather than typing it (the **guard-the-context-window** principle skill). When several independent hypotheses are live, fan them to parallel subagents, each in its own worktree so they can't collide (the **separate-before-serializing-shared-state** principle skill).

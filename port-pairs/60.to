@@ -1,0 +1,1 @@
+Use your configured architect runners (defaults `poteto-claude`, `poteto-gpt`, `poteto-grok`; models pinned in the pstack repo's `agents/` directory).

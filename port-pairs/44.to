@@ -1,0 +1,1 @@
+Before spawning investigators, list the MCP tools available in this session. OpenCode lists MCP servers in its config (`opencode.json` `mcp` key) and exposes MCP tools directly as tools.

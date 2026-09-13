@@ -21,11 +21,11 @@ The resulting tree contains 46 skills, 23 principles, 23 playbooks, and seven ag
 
 ## OpenCode adaptations
 
-Models live in named agents. Following the user's provider preference, every agent and the `/poteto-mode` command now pins an available GitHub Copilot model. The panel uses Sonnet 5, GPT 5.6 Sol, Gemini 3.8 Flash, and Opus 5. General delegates use GPT 6 Astra, code delegates use GPT 5.3 Codex, and comment cleanup uses Sonnet 5. The `poteto-grok` routing name now points to Gemini because Copilot's detected catalog does not include Grok.
+Models live in named agents shared by OpenCode and Claude Code: `opencode/agents/` is the source and `claude/agents/` is rendered from it. Every agent and the OpenCode `/poteto-mode` command pins an available Anthropic model. The panel uses Opus 5 (`poteto-claude`, `poteto-opus`), Sonnet 5 (`poteto-gpt`), and Haiku 4.5 (`poteto-grok`). General delegates use Fable 5.1, code delegates and comment cleanup use Sonnet 5. The `poteto-gpt` and `poteto-grok` routing names are kept for compatibility with the skills that reference them; the routing was originally GitHub Copilot with GPT and Gemini seats.
 
-Workers use exclusive local worktrees with separate runtime ports and data. They receive no unsupported Task arguments. Review-only work is specified in the prompt. Transcript consumers use project-scoped `opencode session list` and `opencode export`.
+Workers use exclusive local worktrees with separate runtime ports and data. They receive no unsupported subagent arguments. Review-only work is specified in the prompt. Skill text is host-neutral: it names the subagent tool, asking the user, the transcript, and the skills directory as roles, and `skills/poteto-mode/references/runtime.md` maps each to OpenCode or Claude Code. Transcript consumers stay project-scoped on both hosts.
 
-Long-running workflows record audit deadlines and checkpoints. They cannot wake a stopped OpenCode session. The watcher polls in bounded calls. `orch` manages durable state through `ORCH_STORE` or `--store`; its Graphite frontier integration remains optional to the rest of pstack.
+Long-running workflows record audit deadlines and checkpoints. They cannot wake a stopped OpenCode session; on Claude Code the playbooks arm the audit tick with `/loop`. The watcher polls in bounded calls. `orch` manages durable state through `ORCH_STORE` or `--store`; its Graphite frontier integration remains optional to the rest of pstack.
 
 The plan checker uses OpenCode agent names and a recorded goal instead of Cursor model slugs and `/goal`. The worktree audit accepts project-scoped session exports, preserves paths with spaces, and requires session inspection before deletion. Closed PRs and untracked work do not imply safe deletion.
 
@@ -38,9 +38,9 @@ The plan checker uses OpenCode agent names and a recorded goal instead of Cursor
 
 ## Verification and maintenance
 
-`scripts/sync-upstream.py` inventories and three-way merges future skill updates. `scripts/adapt-skills.py` applies common platform substitutions after manual conflict resolution. `upstream.json` records the import base.
+`scripts/sync-upstream.py` inventories and three-way merges future skill updates. `scripts/adapt-skills.py` rewrites Cursor vocabulary to the host-neutral wording after manual conflict resolution, and adds `user-invocable: false` to principle leaves. `scripts/claude-agents.mjs` renders `claude/agents/`. `upstream.json` records the import base.
 
-`scripts/verify.mjs` checks frontmatter, references, agent names, and index coverage. `scripts/verify-runtime.py` exercises installation and OpenCode discovery in a temporary configuration, tests the shipped plan template and a missing-lane failure, and runs the actual coordinator and watcher entry points. The bundled Bun suites cover watcher policy, GitHub responses, and coordinator persistence.
+`scripts/verify.mjs` checks frontmatter for both agent formats, references, agent names, host-specific wording outside the runtime reference, rendered-agent freshness, and index coverage. `scripts/verify-runtime.py` exercises both installers and OpenCode discovery in temporary configurations, tests the shipped plan template and a missing-lane failure, and runs the actual coordinator and watcher entry points. The bundled Bun suites cover watcher policy, GitHub responses, and coordinator persistence.
 
 The sync uses an upstream inventory, three-way merge, platform adaptation, and runtime verification sequence. Runtime tests carry the highest rigor here because the new PR tooling makes decisions from persisted state and GitHub responses. The local decision trail is `.audit/upstream-sync.tsv`.
 

@@ -1,0 +1,1 @@
+One `Task` call, `subagent_type: poteto-claude`. The synthesizer's quality check includes spot-verifying citations, which can require MCP access; its prompt forbids file writes. Use `references/synthesizer.md` verbatim, with each reviewer's full output inlined where marked. The synthesizer returns a structured Accepted / Rejected / Backlog list.

@@ -1,0 +1,2 @@
+- `subagent_type`: one panelist agent from the configured interrogate list
+- Prompt instruction: review only, do not edit files

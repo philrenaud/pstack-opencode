@@ -1,0 +1,2 @@
+- The project has a `verify-*` skill: use it.
+- No verify skill for the touched surface: generate one with **create-verification-skill**, or flag the gap in the plan.

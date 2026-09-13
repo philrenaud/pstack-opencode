@@ -1,0 +1,1 @@
+The parent finds its own session before fanning out. Use the CLI: `opencode session list` to find recent sessions, `opencode export <sessionID>` to dump one as JSON. Stay within the current project's sessions. Other projects' sessions are private chats from unrelated work.

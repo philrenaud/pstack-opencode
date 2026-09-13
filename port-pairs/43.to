@@ -1,0 +1,1 @@
+This skill orchestrates three others: an inline mining pass (see step 1), the authoring-a-skill playbook (`skills/poteto-mode/playbooks/authoring-a-skill.md`) for authoring, and the **unslop** skill (prose discipline). It sequences them; it doesn't replace them.

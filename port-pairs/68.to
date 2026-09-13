@@ -1,0 +1,1 @@
+1. Read the OpenCode skill format docs (https://opencode.ai/docs/skills) and follow this repo's existing skills as exemplars. Frontmatter is `name` (lowercase-hyphenated, must match the folder name) plus `description` (1-1024 chars, front-load trigger keywords).

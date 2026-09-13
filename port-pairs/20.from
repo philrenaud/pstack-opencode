@@ -1,0 +1,3 @@
+| Judgment | your configured reflect-judgment model (default `claude-opus-4-8-thinking-xhigh`) | `references/judgment-reviewer.md` |
+| Tooling | your configured reflect-tooling model (default `grok-4.5-fast-xhigh`) | `references/tooling-reviewer.md` |
+| Divergent | your configured reflect-judgment model (default `claude-opus-4-8-thinking-xhigh`) | `references/divergent-reviewer.md` |

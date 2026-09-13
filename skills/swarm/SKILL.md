@@ -5,7 +5,7 @@ description: "Fan out N parallel workers, drain them, and return one report. Use
 
 # Swarm
 
-Fan out N parallel OpenCode workers. They may cover separate slices, race the same brief, or mix both. The parent waits, aggregates, and returns one report.
+Fan out N parallel subagent workers. They may cover separate slices, race the same brief, or mix both. The parent waits, aggregates, and returns one report.
 
 ## Start
 
@@ -28,7 +28,7 @@ Open a todolist with one entry per phase before launching anything.
 
 Spawn all N workers in one message with the chosen `subagent_type`. Give writing workers exclusive worktrees or output directories. Give runtime lanes separate ports and data. Include "Review only. Do not edit files." for read-only work.
 
-When a worker must start from a non-default branch, create its worktree at that ref and put the absolute path in its brief. Do not assume Task creates an isolated checkout.
+When a worker must start from a non-default branch, create its worktree at that ref and put the absolute path in its brief. Do not assume the subagent tool creates an isolated checkout.
 
 Every brief stands alone. Include the goal, scope, exact slice or race arm, how to verify, and what to report. Reports use `PASS`, `ISSUES`, or `BLOCKED` with evidence.
 

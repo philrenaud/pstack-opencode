@@ -1,0 +1,1 @@
+Look for `*-mode/SKILL.md` matching the user's handle, under the project's `.opencode/skills/` or `~/.config/opencode/skills/`. If one exists, confirm intent with the `question` tool (unless they already said "update my skill" or similar):

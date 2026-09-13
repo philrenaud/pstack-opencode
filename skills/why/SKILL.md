@@ -58,7 +58,7 @@ Capture this as seed context (file paths, symbols, commits, PR numbers, linked t
 
 ### Discovery
 
-Before spawning investigators, list the MCP tools available in this session. OpenCode lists MCP servers in its config (`opencode.json` `mcp` key) and exposes MCP tools directly as tools.
+Before spawning investigators, list the MCP tools available in this session. Both hosts expose MCP tools directly as tools; the runtime reference (`skills/poteto-mode/references/runtime.md`) names where each configures its servers.
 
 Map each available MCP to one evidence category:
 

@@ -1,0 +1,1 @@
+One message, three `Task` calls, one per reviewer agent (table below). Model choices are configured per agent in this repo's `agents/` directory. Reviewers need MCP access for context lookups (tickets, chat threads, observability traces referenced in the transcript). The prompt forbids file writes (review only, do not edit files); the parent applies edits.

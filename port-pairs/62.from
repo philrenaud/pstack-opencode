@@ -1,0 +1,1 @@
+A subagent that opens a PR runs `interrogate` and `/deslop`, returns the URL, and does NOT babysit. Return to the parent.

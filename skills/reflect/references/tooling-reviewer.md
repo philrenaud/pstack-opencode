@@ -32,8 +32,8 @@ Scan for:
 
 Findings must point to skills, tools, or MCPs invoked in this transcript. Speculative routings to skills the parent never opened do not count. To check whether a skill was used, scan the transcript for:
 
-- `Read` tool calls against any `SKILL.md` file (workspace `.opencode/skills/`, user-level `~/.config/opencode/skills/`, or wherever pstack is installed (this repo))
-- `Task` prompts that name a skill path
+- `Read` tool calls against any `SKILL.md` file (the project or personal skills directory, or wherever pstack is installed (this repo))
+- subagent prompts that name a skill path
 - Tool calls (Shell, Grep, MCP, etc.) that match a skill's documented commands
 
 Two valid finding shapes:

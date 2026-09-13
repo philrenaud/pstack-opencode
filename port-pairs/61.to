@@ -1,0 +1,2 @@
+opencode session list
+opencode export <sessionID> > /tmp/reflect-transcript.json

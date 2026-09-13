@@ -1,0 +1,3 @@
+- `subagent_type`: `generalPurpose`
+- `model`: one model from the configured interrogate list
+- `readonly`: `true`

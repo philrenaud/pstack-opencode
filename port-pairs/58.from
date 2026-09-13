@@ -1,0 +1,3 @@
+- `subagent_type`: `generalPurpose`
+- `model`: your configured how-explorer model (default `grok-4.5-fast-xhigh`)
+- `readonly`: `true`

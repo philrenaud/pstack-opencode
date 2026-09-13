@@ -2,7 +2,7 @@
 
 **You own the skill's voice.**
 
-1. Read the OpenCode skill format docs (https://opencode.ai/docs/skills) and follow this repo's existing skills as exemplars. Frontmatter is `name` (lowercase-hyphenated, must match the folder name) plus `description` (1-1024 chars, front-load trigger keywords).
+1. Read the skill format docs for your host (linked from `../references/runtime.md`; both hosts read the same Agent Skills layout) and follow this repo's existing skills as exemplars. Frontmatter is `name` (lowercase-hyphenated, must match the folder name) plus `description` (1-1024 chars, front-load trigger keywords).
 2. Validate the skill: frontmatter has `name` and `description`, referenced files exist, cross-skill links resolve.
 3. Test cases if structural. Skip if subjective.
 4. Run **Opening a PR**.

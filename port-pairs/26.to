@@ -1,0 +1,1 @@
+At the end of the run, before handing back, check the log told the truth. Read this run's session via the CLI: `opencode session list` to find it, `opencode export <sessionID>` to dump it as JSON. Stay within the current project's sessions; other projects' sessions are private chats. Walk the log against what actually happened:

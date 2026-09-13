@@ -1,0 +1,5 @@
+- Any prose surface → the **unslop** skill. Your reply is a prose surface; write it per **Writing the reply**. Agent-facing prose also follows the authoring-a-skill playbook (`playbooks/authoring-a-skill.md`) and the OpenCode skill format (https://opencode.ai/docs/skills).
+- Before commit → apply the **unslop** skill's rules to the diff itself (comments, naming, structure), not just prose surfaces.
+- Shipping UI / IDE / CLI → the project-local verify skill (generate one with **create-verification-skill** if the project has none). For bug fixes, reproduce first on the same surface yourself; hand to the user only under the narrow Bug fix step 1 exception.
+- After opening a PR → watch it: `gh pr checks <number> --watch`, then `gh pr view --comments`. Triage failures and comments; don't walk away.
+- Automated PR review bots commented → skeptical posture. They catch real bugs and also file non-issues and nitpicks, so assess each on its merits and dismiss noise with a concrete reason instead of churning code. Triage fix / dismiss / ask.

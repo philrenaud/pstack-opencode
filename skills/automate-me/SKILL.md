@@ -13,7 +13,7 @@ This skill orchestrates three others: an inline mining pass (see step 1), the au
 
 ### 0. Check for an existing skill
 
-Look recursively for `.opencode/skills/**/*-mode/SKILL.md` and `~/.config/opencode/skills/*-mode/SKILL.md` matching the user's handle. Mode skills can live in a personal category directory (`.opencode/skills/<handle>/`), not only at the top level. If one exists, confirm intent with `question` (unless they already said "update my skill" or similar):
+Look recursively for `<project-skills>/**/*-mode/SKILL.md` and `<personal-skills>/*-mode/SKILL.md` matching the user's handle, where the two directories are the host's project and personal skill directories from the runtime reference (`skills/poteto-mode/references/runtime.md`). Mode skills can live in a personal category directory (`<project-skills>/<handle>/`), not only at the top level. If one exists, confirm intent by asking the user (unless they already said "update my skill" or similar):
 
 - Update the existing skill (default for repeat runs)
 - Start fresh (rare, ask why before doing it)
@@ -25,7 +25,7 @@ Update mode changes the rest of the flow:
 
 ### 1. Mine their history
 
-Locate recent sessions before fanning out: `opencode session list` finds this project's sessions, `opencode export <sessionID>` dumps one as JSON. Stay within the current project's sessions. Other projects' sessions are private chats from unrelated work.
+Locate recent sessions before fanning out, per the runtime reference's transcript section. Stay within the current project's sessions. Other projects' sessions are private chats from unrelated work.
 
 Survey recent agent conversations within that scope for recurring patterns. Run multiple parallel subagents across slices of history (e.g. last 2-4 weeks, split into 3 slices so each has enough material). Each slice mining subagent reads the session exports the parent provides, looks for the signals below, and returns a short structured list of patterns it saw with evidence pointers. Default signals worth hunting:
 
@@ -63,13 +63,13 @@ The **poteto-mode** skill shows the shape. Read it for granularity. Don't copy i
 
 ### 4. Draft the skill
 
-Author the skill per the authoring-a-skill playbook (`skills/poteto-mode/playbooks/authoring-a-skill.md`) and the OpenCode skill format (https://opencode.ai/docs/skills). Placement:
+Author the skill per the authoring-a-skill playbook (`skills/poteto-mode/playbooks/authoring-a-skill.md`) and the host's skill format (linked from the runtime reference). Placement:
 
-- Path: preserve an existing mode skill's category. For a new mode, use `.opencode/skills/<handle>/<handle>-mode/SKILL.md` when the repo has an established personal category for that handle. Otherwise default to `.opencode/skills/<handle>-mode/SKILL.md` in the project (or `~/.config/opencode/skills/<handle>-mode/` if the user prefers a personal skill).
+- Path: preserve an existing mode skill's category. For a new mode, use `<project-skills>/<handle>/<handle>-mode/SKILL.md` when the repo has an established personal category for that handle. Otherwise default to `<project-skills>/<handle>-mode/SKILL.md` in the project (or `<personal-skills>/<handle>-mode/` if the user prefers a personal skill).
 - Handle: the user's first name or chosen identifier.
 - Frontmatter `description`: trigger on their name + `/<handle>-mode` + "work in their style", not on generic keywords like "write code" or "review PR".
-- Frontmatter formatting: follow the OpenCode skill format at https://opencode.ai/docs/skills. Keep `description` as one YAML scalar. Quote it or use `description: >-` with indented continuation lines when punctuation or wrapping requires it.
-- OpenCode does not enforce explicit-invocation metadata. Write the description to trigger on the user's mode name or an explicit request for their style. Broaden it only if the user wants their mode applied to other tasks.
+- Frontmatter formatting: follow the host's skill format (linked from the runtime reference). Keep `description` as one YAML scalar. Quote it or use `description: >-` with indented continuation lines when punctuation or wrapping requires it.
+- Neither host needs explicit-invocation metadata for routing. Write the description to trigger on the user's mode name or an explicit request for their style. Broaden it only if the user wants their mode applied to other tasks.
 
 ### 5. Iterate on prose
 

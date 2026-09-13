@@ -1,0 +1,2 @@
+- Prefer `subagent_type: "poteto-agent"`. The built-in `general` is the fallback, and the built-in `explore` works for pure file/keyword searches. Never use the built-in `plan` agent for this; it ignores this skill.
+- Route by role: `poteto-grok` for code exploration, `poteto-claude` for judgment (models are pinned in the pstack repo's `agents/` directory).
