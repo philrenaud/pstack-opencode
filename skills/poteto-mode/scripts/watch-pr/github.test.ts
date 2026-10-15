@@ -6,12 +6,15 @@ import {
   ChecksUnavailable,
   GhGitHubReader,
   WatcherQueryError,
+  buildReviewThreads,
   mapRollupNode,
   orderStack,
+  parseFastCheck,
   parsePullRequest,
-  parseReviewThreads,
+  parseReviewThreadPage,
   resolveChecks,
   resolveContext,
+  resolveReviewThreads,
 } from "./github.ts";
 import {
   fakeReader,
@@ -159,6 +162,37 @@ describe("rollup node mapping", () => {
     ).toMatchObject({ kind: "code-review-gate" });
   });
 
+  it("classifies a Code Review Gate waiting on an owner approval as the gate", () => {
+    expect(
+      mapRollupNode({
+        __typename: "CheckRun",
+        name: "Code Review Gate",
+        status: "COMPLETED",
+        conclusion: "ACTION_REQUIRED",
+        description: "1 of 2 policies",
+      })
+    ).toMatchObject({
+      kind: "code-review-gate",
+      reportedState: "ACTION_REQUIRED",
+    });
+  });
+
+  it("classifies a fast-path Code Review Gate waiting on an owner approval as the gate", () => {
+    expect(
+      parseFastCheck({
+        name: "Code Review Gate",
+        state: "ACTION_REQUIRED",
+        bucket: "fail",
+      })
+    ).toMatchObject({
+      kind: "code-review-gate",
+      reportedState: "ACTION_REQUIRED",
+    });
+    expect(
+      parseFastCheck({ name: "ci", state: "ACTION_REQUIRED", bucket: "fail" })
+    ).toMatchObject({ kind: "failed", reportedState: "ACTION_REQUIRED" });
+  });
+
   it("maps StatusContext states and drops unknown typenames", () => {
     expect(
       mapRollupNode({
@@ -238,6 +272,7 @@ it("annotates Bugbot threads with distinct review-pass counts", () => {
       repository: {
         pullRequest: {
           reviewThreads: {
+            pageInfo: { hasNextPage: false, endCursor: null },
             nodes: [
               {
                 id: "one",
@@ -290,59 +325,104 @@ it("annotates Bugbot threads with distinct review-pass counts", () => {
       },
     },
   };
-  const threads = parseReviewThreads(response);
+  const threads = buildReviewThreads(parseReviewThreadPage(response).threads);
   expect(threads).toHaveLength(2);
   expect(threads.map((thread) => thread.isBugbot)).toEqual([true, true]);
   expect(threads.map((thread) => thread.bugbotReviewPasses)).toEqual([3, 3]);
 });
 
 describe("review thread pagination", () => {
-  it("keeps an unresolved second-page thread and counts Bugbot passes across pages", async () => {
-    const first = JSON.stringify(
-      threadPage({
-        nodes: [
-          {
-            id: "resolved",
-            isResolved: true,
-            comments: { nodes: [comment("RUN_ID: first")] },
-          },
-        ],
-        hasNextPage: true,
-        endCursor: "next",
-      })
-    );
-    const second = JSON.stringify(
-      threadPage({
-        nodes: [
-          {
-            id: "unresolved",
-            isResolved: false,
-            comments: { nodes: [comment("RUN_ID: second")] },
-          },
-        ],
-        hasNextPage: false,
-        endCursor: null,
-      })
-    );
-    const command = await fakeGh(
-      `case "$*" in *after=next*) printf '%s' '${second}' ;; *) printf '%s' '${first}' ;; esac`
-    );
-    const threads = await new GhGitHubReader(command).reviewThreads(context);
-    expect(threads).toMatchObject([
-      { id: "unresolved", bugbotReviewPasses: 2 },
+  const thread = (id: string, resolved = false) => ({
+    id,
+    firstComment: {
+      authorLogin: "someone",
+      body: "please fix",
+      path: "a.ts",
+      line: 1,
+      createdAt: "now",
+    },
+    resolved,
+  });
+
+  it("keeps walking pages until the cursor is exhausted", async () => {
+    const reader = fakeReader({
+      threadPages: [
+        { threads: [thread("one")], endCursor: "next" },
+        { threads: [thread("two")], endCursor: "last" },
+        { threads: [thread("three")], endCursor: null },
+      ],
+    });
+    const threads = await resolveReviewThreads(reader, context);
+    expect(threads.map((item) => item.id)).toEqual(["one", "two", "three"]);
+    expect(reader.calls).toEqual([
+      "reviewThreadPage:null",
+      "reviewThreadPage:next",
+      "reviewThreadPage:last",
     ]);
   });
 
-  it("rejects missing and repeated cursors", async () => {
-    for (const cursor of [null, "same"]) {
-      const page = JSON.stringify(
-        threadPage({ nodes: [], hasNextPage: true, endCursor: cursor })
-      );
-      const command = await fakeGh(`printf '%s' '${page}'`);
-      await expect(
-        new GhGitHubReader(command).reviewThreads(context)
-      ).rejects.toBeInstanceOf(WatcherQueryError);
-    }
+  it("sees an unresolved thread that sits past the first page", async () => {
+    const reader = fakeReader({
+      threadPages: [
+        { threads: [thread("early", true)], endCursor: "next" },
+        { threads: [thread("late")], endCursor: null },
+      ],
+    });
+    const threads = await resolveReviewThreads(reader, context);
+    expect(threads.map((item) => item.id)).toEqual(["late"]);
+  });
+
+  it("stops after a single page when the cursor is exhausted", async () => {
+    const reader = fakeReader({
+      threadPages: [{ threads: [thread("only")], endCursor: null }],
+    });
+    expect((await resolveReviewThreads(reader, context)).length).toBe(1);
+    expect(reader.calls).toEqual(["reviewThreadPage:null"]);
+  });
+
+  it("counts Bugbot review passes across every page", async () => {
+    const bugbot = (id: string, runId: string) => ({
+      id,
+      firstComment: {
+        authorLogin: "bugbot",
+        body: `RUN_ID: ${runId}`,
+        path: "a.ts",
+        line: 1,
+        createdAt: "now",
+      },
+      resolved: false,
+    });
+    const reader = fakeReader({
+      threadPages: [
+        { threads: [bugbot("one", "run-1")], endCursor: "next" },
+        { threads: [bugbot("two", "run-2")], endCursor: null },
+      ],
+    });
+    const threads = await resolveReviewThreads(reader, context);
+    expect(threads.map((item) => item.bugbotReviewPasses)).toEqual([2, 2]);
+  });
+
+  it("drops resolved threads from later pages too", async () => {
+    const reader = fakeReader({
+      threadPages: [
+        { threads: [thread("one")], endCursor: "next" },
+        { threads: [thread("two", true)], endCursor: null },
+      ],
+    });
+    expect(
+      (await resolveReviewThreads(reader, context)).map((item) => item.id)
+    ).toEqual(["one"]);
+  });
+
+  it("rejects a page that omits pageInfo instead of assuming one page", async () => {
+    const response = {
+      data: {
+        repository: {
+          pullRequest: { reviewThreads: { nodes: [] } },
+        },
+      },
+    };
+    expect(() => parseReviewThreadPage(response)).toThrow(WatcherQueryError);
   });
 });
 

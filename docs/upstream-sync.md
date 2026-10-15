@@ -32,6 +32,7 @@ The plan checker uses OpenCode agent names and a recorded goal instead of Cursor
 ## Exclusions
 
 - `make-bot-ui` requires Cursor's `update_state` routine API, secret-request cards, and bot webhook wake events. It has no equivalent runtime in this port.
+- `poteto-help` points at Cursor's illustrated guide, `/setup-pstack` rules in `~/.cursor/rules`, and Cursor-only features, so it is not ported. The README covers OpenCode setup.
 - The existing Benny automation pack remains excluded because it depends on Cursor automations.
 - Cursor marketplace metadata, logo assets, and illustrated guide files stay upstream. The README links to the guide rather than copying Cursor installation instructions.
 - Cursor-only frontmatter is removed. OpenCode does not enforce upstream's explicit-invocation or sticky-mode flags.

@@ -43,7 +43,7 @@ Re-run `./install.sh` after updates that add skills or agents. Edits to any file
 Run `./learn` for the interactive learning dashboard (OpenCode only; it reads OpenCode's session database). It lists the installed skills and playbooks, shows recent loads and consultations, and gives a copyable invocation for each. Press `/` to search, `u` for not-observed entries, and `?` for help. See [the learner guide](docs/learn.md) for scope filters and evidence limits.
 
 - `/poteto-mode <task>` at the start of anything that needs rigor. It matches the task to a playbook (bug fix, feature, perf, refactoring, prototype, autonomous run, ...), copies the playbook steps into a todolist verbatim, and routes to the other skills as steps fire.
-- The other skills also load on demand when a task matches their description, or by asking for them by name: `how`, `why`, `interrogate` (multi-model adversarial review), `arena` (N parallel attempts, graft the best), `architect`, `unslop`, `tdd`, `teach`, `blast-radius`, `reflect`, `recall`, `automate-me`.
+- The other skills also load on demand when a task matches their description, or by asking for them by name: `how`, `why`, `interrogate` (multi-model adversarial review), `arena` (N parallel attempts, graft the best), `architect`, `unslop`, `tdd`, `teach`, `blast-radius`, `reflect`, `recall`, `automate-me`, `sharpen` (approach a task like an expert), `in-your-own-words` (restate your goal first), `ketchup` (catch up on what changed in the chat), `correct` (make repeated mistakes impossible), `benchmark-checklist` (vet a measured number).
 - `setup-pstack` reconfigures which models the roles use.
 - `swarm` covers parallel slices or races. `arena` compares candidate designs and combines the strongest parts.
 - `no-comments` runs the Comment Sicko cleanup delegate. `technical-writing` handles docs and PR prose. `bro` restates the previous answer in plain language.
@@ -84,6 +84,7 @@ The port follows upstream workflows and adapts their runtime requirements:
 | transcripts at `~/.cursor/projects/<slug>/agent-transcripts/` | OpenCode session exports, or `~/.claude/projects/<encoded-cwd>/*.jsonl`; skills say "the transcript" and the runtime reference locates it |
 | `.cursor/skills/` paths | `<project-skills>` / `<personal-skills>`, resolved per host in the runtime reference |
 | `benny` automation pack (Slack triage) | not ported; depends on Cursor's automation runtime |
+| `poteto-help` | not ported; routes through Cursor's guide pages, model rules, and `/loop` |
 | `make-bot-ui` | not ported; requires Cursor bot routines, secret-request cards, and webhook wake events |
 | explicit-invocation and sticky-mode metadata | invocation guidance in descriptions and command prose; `user-invocable: false` hides the principle leaves from Claude Code's menu |
 
