@@ -135,7 +135,7 @@ describe("snapshot query planning", () => {
     expect(snapshot.ci.kind).toBe("ci-pending");
     expect(reader.calls).toEqual([
       "pullRequest",
-      "reviewThreads",
+      "reviewThreadPage:null",
       "checksFastPath",
     ]);
   });
